@@ -12,7 +12,6 @@ const router = express.Router();
 router.post("/signup", protect, attachGym, async (req, res) => {
   try {
     const {
-      id,
       name,
       number,
       gender,
@@ -69,7 +68,6 @@ router.post("/signup", protect, attachGym, async (req, res) => {
 
     // Create member record with gymId
     await member.create({
-      id,
       name,
       gender,
       age,
@@ -90,7 +88,6 @@ router.post("/signup", protect, attachGym, async (req, res) => {
 
     // Create corresponding Renew record with gymId
     await Renew.create({
-      id,
       name,
       number,
       membership_type,

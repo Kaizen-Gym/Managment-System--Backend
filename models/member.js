@@ -2,7 +2,7 @@ import mongoose from "mongoose";
 import Counter from "./Counter.js";
 
 const memberScheme = new mongoose.Schema({
-  id: { type: String, required: true, unique: true },
+  id: { type: String, unique: true },
   name: { type: String, required: true },
   gender: { type: String, enum: ["Male", "Female", "Other"], required: true },
   age: { type: Number, required: true, min: 14 },

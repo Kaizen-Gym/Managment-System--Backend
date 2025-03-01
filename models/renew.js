@@ -1,7 +1,8 @@
 import mongoose from "mongoose";
+import Counter from "./Counter.js";
 
 const renewSchema = new mongoose.Schema({
-  id: { type: String, required: true },
+  id: { type: String },
   name: { type: String, required: true },
   number: { type: String, required: true }, // Changed from Number to String
   membership_type: {
@@ -34,6 +35,23 @@ const renewSchema = new mongoose.Schema({
   membership_end_date: { type: Date, required: true },
 
   gymId: { type: mongoose.Schema.Types.ObjectId, ref: "Gym", required: true },
+});
+
+renewSchema.pre("save", async function (next) {
+  if (this.isNew) {
+    try {
+      // Get and update the counter document for member IDs
+      const counter = await Counter.findOneAndUpdate(
+        { name: "memberId" },
+        { $inc: { seq: 1 } },
+        { new: true, upsert: true },
+      );
+      // Set the member id with "KN" prefix and the new sequence
+      this.id = `KN${counter.seq}`;
+    } catch (error) {
+      next(error);
+    }
+  }
 });
 
 export default mongoose.model("Renew", renewSchema);
