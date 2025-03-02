@@ -247,4 +247,58 @@ router.get("/member/:number", protect, attachGym, async (req, res) => {
   }
 });
 
+//🔹Add membership days from one member to another
+router.post('/transfer', protect, attachGym, async (req, res) => {
+  try {
+    const gymid = req.gymId;
+    const { source_number, target_number } = req.body;
+    
+    const source_member = await member.findOne({ number: source_number, gymId: gymid });
+    const target_member = await member.findOne({ number: target_number, gymId: gymid });
+    
+    if (!source_member || !target_member) {
+      return res.status(404).json({ message: "One or both members not found" });
+    }
+    
+    if (source_member.membership_status.toLowerCase() === 'inactive' || source_member.membership_status.toLowerCase() === 'expired') {
+      return res.status(400).json({ message: `${source_member.name} has no active membership` });
+    }
+    
+    if (target_member.membership_status.toLowerCase() !== 'active') {
+      return res.status(400).json({ message: `${target_member.name} has no active membership` });
+    }
+    
+    // Ensure membership_end_date is a Date object
+    const sourceExpiryDate = new Date(source_member.membership_end_date);
+    const currentDate = Date.now();
+    
+    const daysToTransfer = (sourceExpiryDate.getTime() - currentDate) / (1000 * 60 * 60 * 24);
+    
+    if (daysToTransfer <= 0) {
+      return res.status(400).json({ message: `${source_member.name} has no days to transfer` });
+    }
+    
+    // Deduct days from the source member
+    source_member.membership_end_date = new Date(sourceExpiryDate.getTime() - daysToTransfer * 24 * 60 * 60 * 1000);
+    
+    // Optionally update the source member's status if their membership has expired
+    if (source_member.membership_end_date < new Date()) {
+      source_member.membership_status = 'inactive';
+    }
+    
+    // Add days to the target member
+    target_member.membership_end_date = new Date(
+      new Date(target_member.membership_end_date).getTime() + daysToTransfer * 24 * 60 * 60 * 1000
+    );
+    
+    await source_member.save();
+    await target_member.save();
+    
+    res.status(200).json({ message: "Membership days transferred successfully" });
+  } catch (error) {
+    logger.error(error);
+    res.status(500).json({ message: "Server error", error: error.message });
+  }
+});
+
 export default router;
