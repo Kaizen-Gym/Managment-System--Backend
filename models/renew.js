@@ -21,6 +21,7 @@ const renewSchema = new mongoose.Schema({
     },
   },
   membership_amount: { type: Number, required: true, min: 0 },
+  membership_due_amount: { type: Number, required: true, min: 0, default:0 },
   membership_payment_status: {
     type: String,
     enum: ["Pending", "Paid", "Failed"],

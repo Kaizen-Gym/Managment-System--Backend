@@ -38,7 +38,7 @@ const calculateNewExpiryDate = (currentExpiry, membership_type) => {
 // 🔹 Renew Membership
 router.post('/renew', protect, attachGym, async (req, res) => {
   try {
-    const { number, membership_type, membership_payment_status, membership_payment_mode } = req.body;
+    const { number, membership_type, membership_payment_status, membership_payment_mode, membership_due_amount } = req.body;
     const validation = validateRenewRequest(req.body);
     if (!validation.valid) return res.status(400).json({ message: validation.message });
 
@@ -51,6 +51,8 @@ router.post('/renew', protect, attachGym, async (req, res) => {
       ? new Date(userExists.membership_end_date)
       : new Date();
     const newExpiryDate = calculateNewExpiryDate(currentExpiry, membership_type);
+    
+    const member_total_due_amount = userExists.membership_due_amount + membership_due_amount;
 
     // Update user membership details with gym filter
     const updatedMember = await member.findOneAndUpdate(
@@ -59,6 +61,8 @@ router.post('/renew', protect, attachGym, async (req, res) => {
         $set: {
           membership_type,
           membership_amount: parsedAmount,
+          membership_due_amount,
+          member_total_due_amount,
           membership_payment_status,
           membership_payment_date: new Date(),
           membership_payment_mode,
@@ -76,6 +80,7 @@ router.post('/renew', protect, attachGym, async (req, res) => {
       number,
       membership_type,
       membership_amount: parsedAmount,
+      membership_due_amount,
       membership_payment_status,
       membership_payment_mode,
       membership_end_date: newExpiryDate,
@@ -299,7 +304,5 @@ router.delete('/plans/:id', protect, attachGym, async (req, res) => {
     res.status(500).json({ message: "Server error", error: error.message });
   }
 });
-
-
 
 export default router;

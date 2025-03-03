@@ -1,15 +1,29 @@
-FROM node:22
+# Use official Node.js 22 image as base
+FROM node:22-alpine
 
-WORKDIR /app
+# Set working directory in container
+WORKDIR /usr/src/app
 
+# Copy package files
 COPY package*.json ./
 
-RUN npm install
+# Install dependencies
+# --production flag to only install production dependencies
+# ci is preferred for production builds over npm install
+RUN npm ci --only=production
 
+# Copy source code
 COPY . .
 
+# Environment variables
+ENV NODE_ENV=production
 ENV PORT=5050
 
-EXPOSE $PORT
+# Expose port
+EXPOSE 5050
 
-CMD ["npm", "start"]
+# Command to run the application
+CMD ["node", "server.js"]
+
+HEALTHCHECK --interval=30s --timeout=3s \
+  CMD curl -f http://localhost:5050/health || exit 1
