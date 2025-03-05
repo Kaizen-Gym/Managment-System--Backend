@@ -369,12 +369,13 @@ router.post('/pay-due', protect, attachGym, async (req, res) => {
     // Calculate remaining due amount
     const remainingDueAmount = memberRecord.member_total_due_amount - parsedAmount;
 
-    // Update member record
+    // Update member record: now also update the payment status based on the remaining due amount.
     const updatedMember = await member.findOneAndUpdate(
       { number, gymId: req.gymId },
       {
         $set: {
           member_total_due_amount: remainingDueAmount,
+          membership_payment_status: remainingDueAmount > 0 ? 'Pending' : 'Paid',
           last_due_payment_date: new Date(),
           last_due_payment_amount: parsedAmount
         }

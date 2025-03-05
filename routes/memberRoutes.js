@@ -184,8 +184,23 @@ router.put("/members/:number", protect, attachGym, async (req, res) => {
     
     const updateData = req.body;
     let newPaymentAmount;
-    let remainingDueAmount = updateData.membership_due_amount || userExists.member_total_due_amount;
     let parsedAmount = 0;
+    
+    // Determine remaining due amount based on the provided payment status.
+    // If the status is set to 'Paid', force due amount to 0.
+    let remainingDueAmount;
+    if (
+      updateData.membership_payment_status &&
+      updateData.membership_payment_status.toLowerCase() === 'paid'
+    ) {
+      remainingDueAmount = 0;
+    } else {
+      // Use the passed membership_due_amount if provided; otherwise fallback to the existing due amount.
+      remainingDueAmount =
+        updateData.membership_due_amount !== undefined
+          ? Number(updateData.membership_due_amount)
+          : userExists.member_total_due_amount;
+    }
     
     // If membership_amount is updated
     if (updateData.membership_amount !== undefined) {
@@ -221,7 +236,8 @@ router.put("/members/:number", protect, attachGym, async (req, res) => {
       }
     }
 
-    // Prepare the update operation
+    // Prepare the update operation. Here we also override membership_payment_status
+    // based on the computed remainingDueAmount.
     const updateOperation = {
       ...updateData,
       member_total_due_amount: remainingDueAmount,
@@ -229,7 +245,7 @@ router.put("/members/:number", protect, attachGym, async (req, res) => {
       last_due_payment_date: new Date()
     };
 
-    // If there's a new payment amount, include it in the update
+    // If there's a new payment amount, update total payment accordingly.
     if (parsedAmount > 0) {
       updateOperation.member_total_payment = userExists.member_total_payment + parsedAmount;
     }
@@ -262,8 +278,6 @@ router.put("/members/:number", protect, attachGym, async (req, res) => {
     res.status(500).json({ message: "Server error", error: error.message });
   }
 });
-
-
 
 
 // Get a single member by phone number (alternative route) for the current gym
