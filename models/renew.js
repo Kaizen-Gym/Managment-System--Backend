@@ -21,7 +21,7 @@ const renewSchema = new mongoose.Schema({
     },
   },
   membership_amount: { type: Number, required: true, min: 0 },
-  membership_due_amount: { type: Number, required: true, min: 0, default:0 },
+  membership_due_amount: { type: Number, required: true, min: 0, default: 0 },
   membership_payment_status: {
     type: String,
     enum: ["Pending", "Paid", "Failed"],
@@ -36,6 +36,17 @@ const renewSchema = new mongoose.Schema({
   membership_end_date: { type: Date, required: true },
 
   gymId: { type: mongoose.Schema.Types.ObjectId, ref: "Gym", required: true },
+
+  is_due_payment: {
+    type: Boolean,
+    default: false,
+  },
+
+  payment_type: {
+    type: String,
+    enum: ["Membership Renewal", "Due Payment"],
+    default: "Membership Renewal",
+  },
 });
 
 renewSchema.pre("save", async function (next) {

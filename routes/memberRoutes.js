@@ -48,11 +48,15 @@ router.post("/signup", protect, attachGym, async (req, res) => {
     }
 
     const parsedAmount = Number(membership_amount);
-    if (isNaN(parsedAmount)) {
+    const parseddueamount = Number(membership_due_amount);
+    logger.info(`Membership amount: ${parsedAmount}, Due amount: ${parseddueamount}`);
+    if (isNaN(parsedAmount) || isNaN(parseddueamount)) {
       return res
         .status(400)
-        .json({ message: "Membership amount must be a number" });
+        .json({ message: "Membership amount and due amount must be numbers" });
     }
+    
+    const paidamount = parsedAmount - parseddueamount;
 
     const currentDate = new Date();
     const membership_start_date = new Date(
@@ -75,8 +79,8 @@ router.post("/signup", protect, attachGym, async (req, res) => {
       number,
       email: email || null,
       membership_type,
-      member_total_payment: parsedAmount,
-      member_total_due_payment: membership_due_amount,
+      member_total_payment: paidamount,
+      member_total_due_payment: parseddueamount,
       membership_amount: parsedAmount,
       membership_payment_status,
       membership_start_date,
@@ -94,7 +98,7 @@ router.post("/signup", protect, attachGym, async (req, res) => {
       number,
       membership_type,
       membership_amount: parsedAmount,
-      membership_due_amount,
+      membership_due_amount: parseddueamount,
       membership_payment_status,
       membership_payment_mode,
       membership_end_date,
@@ -168,68 +172,95 @@ router.delete("/members/:number", protect, attachGym, async (req, res) => {
   res.status(200).json({ message: "User deleted successfully" });
 });
 
-// PUT (update) a member by phone number for the current gym
+
+
 router.put("/members/:number", protect, attachGym, async (req, res) => {
-  const { number } = req.params;
-  const userExists = await member.findOne({ number, gymId: req.gymId });
-  if (!userExists) {
-    return res.status(404).json({ message: "User does not exist" });
-  }
-  
-  const updateData = req.body;
-  let newPaymentAmount;
-  
-  // If membership_amount is updated
-  if (updateData.membership_amount !== undefined) {
-    updateData.membership_amount = Number(updateData.membership_amount);
-    if (isNaN(updateData.membership_amount)) {
-      return res.status(400).json({ message: "Membership amount must be a number" });
+  try {
+    const { number } = req.params;
+    const userExists = await member.findOne({ number, gymId: req.gymId });
+    if (!userExists) {
+      return res.status(404).json({ message: "User does not exist" });
     }
-    newPaymentAmount = updateData.membership_amount;
     
-    // Adjust total payment: remove previous payment and add the new one
-    updateData.member_total_payment = 
-      (userExists.member_total_payment - userExists.membership_amount) + newPaymentAmount;
-  }
-  
-  // If membership_type is updated, recalc expiry and related fields
-  if (updateData.membership_type !== undefined && updateData.membership_type !== userExists.membership_type) {
-    const MembershipPlan = mongoose.model('MembershipPlan');
-    const plan = await MembershipPlan.findOne({
-      name: updateData.membership_type,
-      gymId: req.gymId
-    });
-    if (plan) {
-      updateData.membership_amount = plan.price;
-      updateData.membership_duration = plan.duration;
-      // Determine a start date: either use the provided one or fallback to the existing one
-      const startDate = new Date(updateData.membership_start_date || userExists.membership_start_date);
-      const endDate = new Date(startDate);
-      endDate.setMonth(endDate.getMonth() + plan.duration);
-      updateData.membership_end_date = endDate;
-    } else {
-      return res.status(400).json({ message: "Invalid membership type" });
-    }
-  }
-  
-  const updatedMember = await member.findOneAndUpdate(
-    { number, gymId: req.gymId },
-    updateData,
-    { new: true }
-  );
-  
-  // Update the latest renew record if payment amount was changed
-  if (newPaymentAmount !== undefined) {
-    const latestRenew = await Renew.findOne({ memberId: updatedMember._id })
-      .sort({ createdAt: -1 });
+    const updateData = req.body;
+    let newPaymentAmount;
+    let remainingDueAmount = updateData.membership_due_amount || userExists.member_total_due_amount;
+    let parsedAmount = 0;
+    
+    // If membership_amount is updated
+    if (updateData.membership_amount !== undefined) {
+      updateData.membership_amount = Number(updateData.membership_amount);
+      if (isNaN(updateData.membership_amount)) {
+        return res.status(400).json({ message: "Membership amount must be a number" });
+      }
+      newPaymentAmount = updateData.membership_amount;
+      parsedAmount = newPaymentAmount;
       
-    if (latestRenew) {
-      latestRenew.payment_amount = newPaymentAmount;
-      await latestRenew.save();
+      // Adjust total payment: remove previous payment and add the new one
+      updateData.member_total_payment = 
+        (userExists.member_total_payment - userExists.membership_amount) + newPaymentAmount;
     }
+    
+    // If membership_type is updated, recalc expiry and related fields
+    if (updateData.membership_type !== undefined && updateData.membership_type !== userExists.membership_type) {
+      const MembershipPlan = mongoose.model('MembershipPlan');
+      const plan = await MembershipPlan.findOne({
+        name: updateData.membership_type,
+        gymId: req.gymId
+      });
+      if (plan) {
+        updateData.membership_amount = plan.price;
+        updateData.membership_duration = plan.duration;
+        // Determine a start date: either use the provided one or fallback to the existing one
+        const startDate = new Date(updateData.membership_start_date || userExists.membership_start_date);
+        const endDate = new Date(startDate);
+        endDate.setMonth(endDate.getMonth() + plan.duration);
+        updateData.membership_end_date = endDate;
+      } else {
+        return res.status(400).json({ message: "Invalid membership type" });
+      }
+    }
+
+    // Prepare the update operation
+    const updateOperation = {
+      ...updateData,
+      member_total_due_amount: remainingDueAmount,
+      membership_payment_status: remainingDueAmount > 0 ? 'Pending' : 'Paid',
+      last_due_payment_date: new Date()
+    };
+
+    // If there's a new payment amount, include it in the update
+    if (parsedAmount > 0) {
+      updateOperation.member_total_payment = userExists.member_total_payment + parsedAmount;
+    }
+    
+    const updatedMember = await member.findOneAndUpdate(
+      { number, gymId: req.gymId },
+      { $set: updateOperation },
+      { new: true }
+    );
+    
+    // Update the latest renew record if payment amount was changed
+    if (newPaymentAmount !== undefined) {
+      const latestRenew = await Renew.findOne({ 
+        number: updatedMember.number,
+        gymId: req.gymId 
+      }).sort({ createdAt: -1 });
+        
+      if (latestRenew) {
+        latestRenew.membership_amount = newPaymentAmount;
+        await latestRenew.save();
+      }
+    }
+    
+    res.status(200).json({ 
+      message: "Member updated successfully", 
+      member: updatedMember 
+    });
+  } catch (error) {
+    logger.error(error);
+    res.status(500).json({ message: "Server error", error: error.message });
   }
-  
-  res.status(200).json({ message: "Member updated successfully", member: updatedMember });
 });
 
 

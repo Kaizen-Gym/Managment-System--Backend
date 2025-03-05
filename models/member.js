@@ -9,7 +9,7 @@ const memberScheme = new mongoose.Schema({
   email: { type: String, unique: true },
   number: { type: String, required: true, unique: true },
   member_total_payment: { type: Number, required: true, min: 0, default: 0 },
-  member_total_due_amount: { type: Number, required: true, min: 0, default: 0 },
+  member_total_due_amount: { type: Number, min: 0 },
   createdAt: { type: Date, default: Date.now },
 
   // Instead of a fixed enum, we'll validate against MembershipPlan names
@@ -37,7 +37,7 @@ const memberScheme = new mongoose.Schema({
   membership_end_date: { type: Date, required: true },
   membership_duration: { type: Number, required: true },
   membership_amount: { type: Number, required: true, min: 0 },
-  membership_due_amount: { type: Number, required: true, min: 0, default:0 },
+  membership_due_amount: { type: Number, min: 0 },
   membership_payment_status: {
     type: String,
     enum: ["Pending", "Paid", "Failed"],

@@ -38,56 +38,81 @@ const calculateNewExpiryDate = (currentExpiry, membership_type) => {
 // 🔹 Renew Membership
 router.post('/renew', protect, attachGym, async (req, res) => {
   try {
-    const { number, membership_type, membership_payment_status, membership_payment_mode, membership_due_amount } = req.body;
-    const validation = validateRenewRequest(req.body);
-    if (!validation.valid) return res.status(400).json({ message: validation.message });
+    const { 
+      number, 
+      membership_type, 
+      membership_amount,
+      membership_due_amount,
+      membership_payment_status, 
+      membership_payment_mode 
+    } = req.body;
 
-    const parsedAmount = validation.parsedAmount;
-    // Filter by both number and gymId
-    const userExists = await member.findOne({ number, gymId: req.gymId })
-    if (!userExists) return res.status(404).json({ message: "User does not exist" });
+    // Validate required fields
+    if (!number || !membership_type || membership_amount === undefined) {
+      return res.status(400).json({ message: "All required fields must be filled" });
+    }
 
-    const currentExpiry = userExists.membership_end_date && new Date(userExists.membership_end_date) > new Date()
-      ? new Date(userExists.membership_end_date)
+    // Convert amounts to numbers and validate
+    const parsedAmount = Number(membership_amount);
+    const parsedDueAmount = Number(membership_due_amount || 0);
+
+    if (isNaN(parsedAmount) || isNaN(parsedDueAmount)) {
+      return res.status(400).json({ message: "Invalid amount values" });
+    }
+
+    // Find the existing member
+    const existingMember = await member.findOne({ number, gymId: req.gymId });
+    if (!existingMember) {
+      return res.status(404).json({ message: "Member not found" });
+    }
+
+    // Calculate new expiry date
+    const currentExpiry = existingMember.membership_end_date && 
+      new Date(existingMember.membership_end_date) > new Date()
+      ? new Date(existingMember.membership_end_date)
       : new Date();
-    const newExpiryDate = calculateNewExpiryDate(currentExpiry, membership_type);
-    
-    const member_total_due_amount = userExists.membership_due_amount + membership_due_amount;
 
-    // Update user membership details with gym filter
+    const newExpiryDate = calculateNewExpiryDate(currentExpiry, membership_type);
+
+    // Update member
     const updatedMember = await member.findOneAndUpdate(
       { number, gymId: req.gymId },
       {
         $set: {
           membership_type,
           membership_amount: parsedAmount,
-          membership_due_amount,
-          member_total_due_amount,
+          membership_due_amount: parsedDueAmount,
+          member_total_due_amount: parsedDueAmount,
           membership_payment_status,
           membership_payment_date: new Date(),
           membership_payment_mode,
           membership_end_date: newExpiryDate,
           membership_status: "Active"
         },
-        $inc: { member_total_payment: parsedAmount }
+        $inc: { 
+          member_total_payment: parsedAmount - parsedDueAmount 
+        }
       },
       { new: true }
     );
 
-    // Create Renew record with gymId
-    await Renew.create([{
-      name: updatedMember.name,
+    // Create renewal record
+    await Renew.create({
+      name: existingMember.name,
       number,
       membership_type,
       membership_amount: parsedAmount,
-      membership_due_amount,
+      membership_due_amount: parsedDueAmount,
       membership_payment_status,
       membership_payment_mode,
       membership_end_date: newExpiryDate,
       gymId: req.gymId
-    }]);
+    });
 
-    res.status(201).json({ message: "Membership renewed successfully" });
+    res.status(201).json({ 
+      message: "Membership renewed successfully",
+      member: updatedMember
+    });
 
   } catch (error) {
     logger.error(error);
@@ -301,6 +326,89 @@ router.delete('/plans/:id', protect, attachGym, async (req, res) => {
     });
   } catch (error) {
     logger.error('Error deleting membership plan:', error);
+    res.status(500).json({ message: "Server error", error: error.message });
+  }
+});
+
+router.post('/pay-due', protect, attachGym, async (req, res) => {
+  try {
+    const { number, amount_paid, payment_mode } = req.body;
+
+    // Validate request body
+    if (!number || !amount_paid || !payment_mode) {
+      return res.status(400).json({ 
+        message: "Please provide member number, amount paid, and payment mode" 
+      });
+    }
+
+    const parsedAmount = Number(amount_paid);
+    if (isNaN(parsedAmount) || parsedAmount <= 0) {
+      return res.status(400).json({ 
+        message: "Amount paid must be a positive number" 
+      });
+    }
+
+    // Find the member
+    const memberRecord = await member.findOne({ number, gymId: req.gymId });
+    if (!memberRecord) {
+      return res.status(404).json({ message: "Member not found" });
+    }
+
+    // Check if member has any due amount
+    if (!memberRecord.member_total_due_amount || memberRecord.member_total_due_amount <= 0) {
+      return res.status(400).json({ message: "Member has no due amount" });
+    }
+
+    // Validate if payment amount is not more than due amount
+    if (parsedAmount > memberRecord.member_total_due_amount) {
+      return res.status(400).json({ 
+        message: "Payment amount cannot be more than due amount" 
+      });
+    }
+
+    // Calculate remaining due amount
+    const remainingDueAmount = memberRecord.member_total_due_amount - parsedAmount;
+
+    // Update member record
+    const updatedMember = await member.findOneAndUpdate(
+      { number, gymId: req.gymId },
+      {
+        $set: {
+          member_total_due_amount: remainingDueAmount,
+          last_due_payment_date: new Date(),
+          last_due_payment_amount: parsedAmount
+        }
+      },
+      { new: true }
+    );
+
+    // Create a payment record
+    await Renew.create({
+      name: memberRecord.name,
+      number,
+      membership_type: memberRecord.membership_type, // Use existing membership type
+      membership_amount: parsedAmount,
+      membership_due_amount: remainingDueAmount,
+      membership_payment_status: 'Paid',
+      membership_payment_mode: payment_mode,
+      membership_end_date: memberRecord.membership_end_date,
+      gymId: req.gymId,
+      is_due_payment: true, // Flag to indicate this is a due payment
+      payment_type: 'Due Payment' // Additional field to distinguish payment type
+    });
+
+    res.status(200).json({
+      message: "Due payment processed successfully",
+      remaining_due: remainingDueAmount,
+      payment_details: {
+        amount_paid: parsedAmount,
+        payment_date: new Date(),
+        payment_mode
+      }
+    });
+
+  } catch (error) {
+    logger.error('Error processing due payment:', error);
     res.status(500).json({ message: "Server error", error: error.message });
   }
 });
