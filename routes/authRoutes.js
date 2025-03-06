@@ -136,4 +136,16 @@ router.get("/profile", protect, attachGym, async (req, res) => {
   }
 });
 
+// **Check User Role**
+router.get("/check-role", protect, attachGym, async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id).select("user_type");
+    if (!user) return res.status(404).json({ message: "User not found" });
+    res.json({ role: user.user_type });
+  } catch (error) {
+    logger.error(error);
+    res.status(500).json({ message: "Server error", error: error.message });
+  }
+});
+
 export default router;

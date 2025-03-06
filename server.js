@@ -14,6 +14,7 @@ import reportRoutes from "./routes/reportRoutes.js";
 import membershipRoutes from "./routes/membershipRoutes.js";
 import attendanceRoutes from "./routes/attendenceRoutes.js";
 import utilsRoutes from "./routes/utilsRoutes.js";
+import userRoutes from "./routes/userRoutes.js"; // Import the new user routes
 
 // connect to the database
 try {
@@ -66,6 +67,7 @@ app.use("/api/reports", reportRoutes);
 app.use("/api/memberships", membershipRoutes);
 app.use("/api", attendanceRoutes);
 app.use("/api/utils", utilsRoutes);
+app.use("/api", userRoutes); // Add the new user routes
 
 // start the server
 app.listen(5050, () => {
