@@ -56,6 +56,12 @@ GET /api/auth/profile
 ```
 *Requires Authentication Token*
 
+#### Check User Role
+```http
+GET /api/auth/check-role
+```
+*Requires Authentication Token*
+
 ### Member Routes (`/api/member`)
 
 #### Create Member
@@ -165,6 +171,37 @@ POST /api/memberships/renew
 #### Get Membership Plans
 ```http
 GET /api/memberships/plans
+```
+*Requires Authentication Token*
+
+### User Routes (`/api`)
+
+#### List All Users
+```http
+GET /api/users
+```
+*Requires Authentication Token*
+
+#### Edit User by ID
+```http
+PUT /api/users/:id
+```
+*Requires Authentication Token*
+**Body:**
+```json
+{
+  "name": "string",
+  "gender": "string",
+  "age": "number",
+  "email": "string",
+  "number": "string",
+  "user_type": "string"
+}
+```
+
+#### Delete User by ID
+```http
+DELETE /api/users/:id
 ```
 *Requires Authentication Token*
 

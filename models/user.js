@@ -8,7 +8,7 @@ const userSchema = new mongoose.Schema({
     email: { type: String, required: true, unique: true },
     number: { type: String, required: true, unique: true },
     password: { type: String, required: true }, // Must be hashed before saving
-    user_type: { type: String, enum: ['Admin', 'User'], default: 'User' },
+    user_type: { type: String, enum: ['Admin', 'User', 'Trainer', 'Receptionist', 'Manager'], default: 'User' },
     createdAt: { type: Date, default: Date.now },
     
     gymId: { type: mongoose.Schema.Types.ObjectId, ref: 'Gym', required: true },
@@ -30,6 +30,13 @@ userSchema.pre('save', async function (next) {
 // Compare passwords during login
 userSchema.methods.matchPassword = async function (enteredPassword) {
     return await bcrypt.compare(enteredPassword, this.password);
+};
+
+// Method to add a new role dynamically
+userSchema.statics.addRole = function (role) {
+    if (!this.schema.path('user_type').enumValues.includes(role)) {
+        this.schema.path('user_type').enumValues.push(role);
+    }
 };
 
 export default mongoose.model('User', userSchema);
