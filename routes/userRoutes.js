@@ -1,5 +1,6 @@
 import express from "express";
 import User from "../models/user.js";
+import Role from "../models/role.js"; // Import the Role model
 import protect from "../middleware/protect.js";
 import attachGym from "../middleware/attachGym.js";
 import logger from "../utils/logger.js";
@@ -54,6 +55,59 @@ router.delete("/users/:id", protect, attachGym, restrictManager, async (req, res
     }
 
     res.status(200).json({ message: "User deleted successfully" });
+  } catch (error) {
+    logger.error(error);
+    res.status(500).json({ message: "Server error", error: error.message });
+  }
+});
+
+// GET /api/roles - Get all available user roles
+router.get("/roles", async (req, res) => {
+  try {
+    // You might have roles defined in a separate Role collection.
+    // If not, you can still fall back to your enum values:
+    const roles = await Role.find({});
+    if (roles.length > 0) {
+      res.status(200).json(roles);
+    } else {
+      const enumRoles = User.schema.path("user_type").enumValues;
+      res.status(200).json(enumRoles);
+    }
+  } catch (error) {
+    res.status(500).json({ message: "Server error", error: error.message });
+  }
+});
+
+// POST /api/users - Create a new user (Registration)
+router.post("/users", protect, attachGym, restrictManager, async (req, res) => {
+  try {
+    const { email, name, user_type, number, password, gender, age, permissions, gymId } = req.body;
+    let finalPermissions = permissions;
+    
+    // If permissions are not provided, use role defaults.
+    if (!finalPermissions) {
+      const roleData = await Role.findOne({ roleName: user_type });
+      if (roleData) {
+        finalPermissions = roleData.defaultPermissions;
+      } else {
+        // Fallback default permissions
+        finalPermissions = ["view_dashboard"];
+      }
+    }
+
+    const user = await User.create({ 
+      email, 
+      name, 
+      user_type, 
+      number, 
+      password, 
+      age, 
+      gender, 
+      gymId, 
+      permissions: finalPermissions 
+    });
+
+    res.status(201).json(user);
   } catch (error) {
     logger.error(error);
     res.status(500).json({ message: "Server error", error: error.message });

@@ -7,6 +7,7 @@ import logger from '../utils/logger.js';
 import protect from '../middleware/protect.js';
 import attachGym from '../middleware/attachGym.js';
 import MembershipPlan from '../models/membershipPlan.js';
+import moment from 'moment';
 
 const router = express.Router();
 
@@ -26,14 +27,27 @@ const validateRenewRequest = (body) => {
   return { valid: true, parsedAmount };
 };
 
-// 🔹 Function to calculate new expiry date
-const calculateNewExpiryDate = (currentExpiry, membership_type) => {
-  let newExpiryDate = new Date(currentExpiry);
-  if (membership_type === 'Monthly') newExpiryDate.setMonth(newExpiryDate.getMonth() + 1);
-  if (membership_type === 'Quarterly') newExpiryDate.setMonth(newExpiryDate.getMonth() + 3);
-  if (membership_type === 'Yearly') newExpiryDate.setFullYear(newExpiryDate.getFullYear() + 1);
-  return newExpiryDate;
+const calculateNewExpiryDate = async (currentExpiry, membershipType) => {
+  logger.info(`Calculating new expiry date for membership type: ${membershipType}`);
+
+  // Retrieve the membership plan by name
+  const planUsed = await MembershipPlan.findOne({ name: membershipType });
+  if (!planUsed) {
+    throw new Error(`Membership plan not found for type: ${membershipType}`);
+  }
+
+  // The membership plan duration is expected to be in the format "1M", "2M", etc.
+  // Extract the numeric value which represents the number of months.
+  const durationMonths = parseInt(planUsed.duration, 10);
+  if (isNaN(durationMonths)) {
+    throw new Error(`Invalid duration value: ${planUsed.duration}`);
+  }
+
+  // Calculate the new expiry date by adding the duration in months
+  const newExpiry = moment(currentExpiry).add(durationMonths, 'months').toDate();
+  return newExpiry;
 };
+
 
 // 🔹 Renew Membership
 router.post('/renew', protect, attachGym, async (req, res) => {
@@ -67,12 +81,12 @@ router.post('/renew', protect, attachGym, async (req, res) => {
     }
 
     // Calculate new expiry date
-    const currentExpiry = existingMember.membership_end_date && 
+    const currentExpiry = existingMember.membership_end_date &&
       new Date(existingMember.membership_end_date) > new Date()
       ? new Date(existingMember.membership_end_date)
       : new Date();
 
-    const newExpiryDate = calculateNewExpiryDate(currentExpiry, membership_type);
+    const newExpiryDate = await calculateNewExpiryDate(currentExpiry, membership_type);
 
     // Update member
     const updatedMember = await member.findOneAndUpdate(
@@ -370,7 +384,8 @@ router.post('/pay-due', protect, attachGym, async (req, res) => {
     const remainingDueAmount = memberRecord.member_total_due_amount - parsedAmount;
 
     // Update member record: now also update the payment status based on the remaining due amount.
-    const updatedMember = await member.findOneAndUpdate(
+    // Update member record without storing the result
+    await member.findOneAndUpdate(
       { number, gymId: req.gymId },
       {
         $set: {

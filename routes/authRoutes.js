@@ -6,6 +6,7 @@ import jwt from "jsonwebtoken";
 import logger from "../utils/logger.js";
 import protect from "../middleware/protect.js";
 import attachGym from '../middleware/attachGym.js';
+import Role from "../models/role.js";
 
 const router = express.Router();
 
@@ -17,7 +18,6 @@ const generateToken = (userId, gymId) => {
 // **Register User**
 router.post("/register", async (req, res) => {
   try {
-    // Extract gymId from the request body since attachGym is not applied here.
     let { name, gender, age, email, number, password, user_type, gymId } = req.body;
 
     if (!name || !gender || !age || !email || !number || !password || !gymId) {
@@ -30,10 +30,7 @@ router.post("/register", async (req, res) => {
 
     // Check if any admin exists in the system
     const adminExists = await User.findOne({ user_type: "Admin" });
-
     if (adminExists) {
-      // If an admin exists, only an admin can create new accounts.
-      // Require the request to include a valid admin token.
       if (!req.headers.authorization) {
         return res.status(403).json({ message: "Not authorized to create accounts" });
       }
@@ -57,7 +54,33 @@ router.post("/register", async (req, res) => {
       user_type = user_type || "Admin";
     }
 
-    // Create the new user using gymId from the request body.
+    // Define default permissions based on user_type:
+    let defaultPermissions = [];
+    switch (user_type) {
+      case "Admin":
+        defaultPermissions = [
+          "view_dashboard",
+          "view_members",
+          "view_reports",
+          "view_membership_plans",
+          "view_settings",
+          "manage_users"
+        ];
+        break;
+      case "Trainer":
+        defaultPermissions = ["view_dashboard", "view_members"];
+        break;
+      case "Receptionist":
+        defaultPermissions = ["view_dashboard", "view_members"];
+        break;
+      case "Manager":
+        defaultPermissions = ["view_dashboard", "view_reports", "view_settings"];
+        break;
+      default:
+        defaultPermissions = ["view_dashboard"];
+    }
+
+    // Create the new user using gymId from the request body, including permissions.
     const user = await User.create({
       name,
       gender,
@@ -66,6 +89,7 @@ router.post("/register", async (req, res) => {
       number,
       password,
       user_type,
+      permissions: defaultPermissions,
       gymId: gymId,
     });
 
@@ -75,6 +99,7 @@ router.post("/register", async (req, res) => {
       number: user.number,
       email: user.email,
       role: user.user_type,
+      permissions: user.permissions,
       token: generateToken(user._id, user.gymId),
     });
     logger.info(`User registered: ${user.name}`);
@@ -104,6 +129,8 @@ router.post("/login", async (req, res) => {
       name: user.name,
       email: user.email,
       token: generateToken(user._id, user.gymId),
+      user_type: user.user_type,
+      permissions: user.permissions,
     });
   } catch (error) {
     logger.error(error);

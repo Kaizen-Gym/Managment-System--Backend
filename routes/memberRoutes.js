@@ -79,9 +79,10 @@ router.post("/signup", protect, attachGym, async (req, res) => {
       number,
       email: email || null,
       membership_type,
-      member_total_payment: paidamount,
-      member_total_due_payment: parseddueamount,
       membership_amount: parsedAmount,
+      membership_due_amount: parseddueamount,        // Add this field
+      member_total_due_amount: parseddueamount,       // And this for consistency
+      member_total_payment: paidamount,
       membership_payment_status,
       membership_start_date,
       membership_payment_date: currentDate,
