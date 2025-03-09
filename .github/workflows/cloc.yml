@@ -1,0 +1,35 @@
+name: Count Lines of Code
+
+on:
+  push:
+    branches:
+      - main
+  schedule:
+    - cron: '0 0 * * *' # Runs daily at midnight UTC
+  workflow_dispatch: # Allows manual trigger
+
+jobs:
+  count-loc:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install cloc
+        run: sudo apt-get install -y cloc
+
+      - name: Run cloc and save output
+        run: |
+          echo "Lines of Code Report - $(date)" > cloc_report.txt
+          cloc . --exclude-dir=node_modules,dist,coverage,.devcontainer >> cloc_report.txt
+          echo "" >> cloc_report.txt
+          echo "Generated on: $(date)" >> cloc_report.txt
+
+      - name: Commit and push report
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add cloc_report.txt
+          git commit -m "Update cloc report [$(date)]" || exit 0
+          git push
