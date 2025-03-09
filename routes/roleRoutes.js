@@ -43,11 +43,12 @@ router.get("/roles", protect, async (req, res) => {
   }
 });
 
-// UPDATE a role's permissions
-router.put("/roles/:id", protect, async (req, res) => {
+// UPDATE a role's permissions using roleName instead of id
+router.put("/roles/:roleName", protect, async (req, res) => {
   try {
     const { defaultPermissions, currentPermissions } = req.body;
-    const role = await Role.findById(req.params.id);
+    // Use findOne with the roleName instead of findById
+    const role = await Role.findOne({ roleName: req.params.roleName });
     if (!role) {
       return res.status(404).json({ message: "Role not found" });
     }

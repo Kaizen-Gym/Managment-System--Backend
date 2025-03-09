@@ -6,7 +6,6 @@ import jwt from "jsonwebtoken";
 import logger from "../utils/logger.js";
 import protect from "../middleware/protect.js";
 import attachGym from '../middleware/attachGym.js';
-import Role from "../models/role.js";
 
 const router = express.Router();
 
@@ -131,6 +130,7 @@ router.post("/login", async (req, res) => {
       token: generateToken(user._id, user.gymId),
       user_type: user.user_type,
       permissions: user.permissions,
+      gymId: user.gymId,
     });
   } catch (error) {
     logger.error(error);
@@ -154,7 +154,10 @@ router.post("/logout", protect, attachGym, async (req, res) => {
 // **Get User Profile**
 router.get("/profile", protect, attachGym, async (req, res) => {
   try {
-    const user = await User.findById(req.user.id).select("-password");
+    const user = await User.findById(req.user.id)
+      .select("-password")
+      .populate("gymId"); // This will populate all gym fields
+
     if (!user) return res.status(404).json({ message: "User not found" });
     res.json(user);
   } catch (error) {
@@ -162,6 +165,7 @@ router.get("/profile", protect, attachGym, async (req, res) => {
     res.status(500).json({ message: "Server error", error: error.message });
   }
 });
+
 
 // **Check User Role**
 router.get("/check-role", protect, attachGym, async (req, res) => {

@@ -32,7 +32,12 @@ router.put("/users/:id", protect, attachGym, restrictManager, async (req, res) =
     const { id } = req.params;
     const updateData = req.body;
 
-    const user = await User.findOneAndUpdate({ _id: id, gymId: req.gymId }, updateData, { new: true }).select("-password");
+    const user = await User.findOneAndUpdate(
+      { _id: id, gymId: req.gymId },
+      updateData,
+      { new: true }
+    ).select("-password");
+
     if (!user) {
       return res.status(404).json({ message: "User not found" });
     }
@@ -43,6 +48,7 @@ router.put("/users/:id", protect, attachGym, restrictManager, async (req, res) =
     res.status(500).json({ message: "Server error", error: error.message });
   }
 });
+
 
 // DELETE /api/users/:id - Delete a user by ID
 router.delete("/users/:id", protect, attachGym, restrictManager, async (req, res) => {
