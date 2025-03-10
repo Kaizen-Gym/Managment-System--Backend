@@ -13,6 +13,7 @@ const roleSchema = new mongoose.Schema(
         "view_membership_plans",
         "view_settings",
         "manage_users",
+        "view_payment_records",
       ],
     },
     // Current (active) permissions that can be edited independently.
