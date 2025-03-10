@@ -34,6 +34,7 @@ const trainerSchema = new mongoose.Schema({
     },
   ],
   createdAt: { type: Date, default: Date.now },
+  photo: { data: Buffer, contentType: String },
 
   gymId: { type: mongoose.Schema.Types.ObjectId, ref: "Gym", required: true },
 });

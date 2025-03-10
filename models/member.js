@@ -11,6 +11,7 @@ const memberScheme = new mongoose.Schema({
   member_total_payment: { type: Number, required: true, min: 0, default: 0 },
   member_total_due_amount: { type: Number, min: 0 },
   createdAt: { type: Date, default: Date.now },
+  photo: { data: Buffer, contentType: String },
 
   // Instead of a fixed enum, we'll validate against MembershipPlan names
   membership_type: {
