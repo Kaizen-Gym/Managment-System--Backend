@@ -45,6 +45,7 @@ router.post(
         membership_due_amount,
         membership_payment_status,
         membership_payment_mode,
+        membership_payment_date
       } = req.body;
 
       if (
@@ -57,6 +58,7 @@ router.post(
           membership_amount,
           membership_payment_status,
           membership_payment_mode,
+          membership_payment_date
         ].every(Boolean)
       ) {
         return res
