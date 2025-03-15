@@ -560,44 +560,248 @@ DELETE /api/roles/:id
 
 _Requires Authentication Token_
 
-### Report Routes (`/api/reports`)
+### Analytics Routes (`/api/reports/analytics`)
 
-#### Get Membership Reports (with Filters)
-
+#### Get Membership Analytics
 ```http
-GET /api/reports/membership
+GET /api/reports/analytics/membership
 ```
-
 _Requires Authentication Token_
 
-- **Query Parameters (Optional):**
-  - `name`: String (partial match, case-insensitive)
-  - `gender`: String
-  - `email`: String
-  - `number`: String
-  - `membership_type`: String
-  - `membership_status`: String
-  - `membership_payment_status`: String
-  - `membership_payment_mode`: String
-  - `membership_payment_reference`: String
-  - `age`: Number
-  - `member_total_payment`: Number
-  - `membership_duration`: Number
-  - `membership_amount`: Number
-  - `membership_start_date_from`: Date (YYYY-MM-DD)
-  - `membership_start_date_to`: Date (YYYY-MM-DD)
-  - `membership_end_date_from`: Date (YYYY-MM-DD)
-  - `membership_end_date_to`: Date (YYYY-MM-DD)
-  - `membership_payment_date_from`: Date (YYYY-MM-DD)
-  - `membership_payment_date_to`: Date (YYYY-MM-DD)
-
-#### Get Financial Reports
-
-```http
-GET /api/reports/financial
+**Response:**
+```json
+{
+  "retention": {
+    "currentRetentionRate": "number",
+    "monthlyRetention": [
+      {
+        "_id": {
+          "year": "number",
+          "month": "number"
+        },
+        "totalMembers": "number",
+        "retainedMembers": "number"
+      }
+    ],
+    "activeMembers": "number",
+    "totalAnalyzed": "number"
+  },
+  "churn": {
+    "currentChurnRate": "number",
+    "lostMembersCount": "number",
+    "churnReasons": {
+      "expired": "number",
+      "inactive": "number"
+    },
+    "monthlyChurn": [
+      {
+        "_id": {
+          "year": "number",
+          "month": "number"
+        },
+        "count": "number"
+      }
+    ]
+  },
+  "growth": {
+    "monthlyGrowth": [
+      {
+        "_id": {
+          "year": "number",
+          "month": "number"
+        },
+        "newMembers": "number",
+        "totalRevenue": "number",
+        "growthRate": "number"
+      }
+    ],
+    "totalGrowth": "number"
+  },
+  "demographics": {
+    "ageDistribution": [
+      {
+        "_id": "string",
+        "count": "number"
+      }
+    ],
+    "genderDistribution": [
+      {
+        "_id": "string",
+        "count": "number"
+      }
+    ],
+    "membershipTypeDistribution": [
+      {
+        "_id": "string",
+        "count": "number",
+        "revenue": "number"
+      }
+    ]
+  },
+  "trends": [
+    {
+      "_id": {
+        "year": "number",
+        "month": "number"
+      },
+      "activeMembers": "number",
+      "totalRevenue": "number",
+      "averageDuration": "number"
+    }
+  ]
+}
 ```
 
+#### Get Attendance Analytics
+```http
+GET /api/reports/analytics/attendance
+```
 _Requires Authentication Token_
+
+**Response:**
+```json
+{
+  "peakHours": {
+    "hourlyPatterns": [
+      {
+        "_id": {
+          "hour": "number",
+          "dayOfWeek": "number"
+        },
+        "count": "number"
+      }
+    ],
+    "averageVisitDuration": "number",
+    "busiestDays": [
+      {
+        "_id": "number",
+        "count": "number"
+      }
+    ],
+    "totalVisits": "number"
+  },
+  "weeklyPatterns": [
+    {
+      "_id": {
+        "dayOfWeek": "number",
+        "hour": "number"
+      },
+      "count": "number"
+    }
+  ],
+  "monthlyTrends": [
+    {
+      "_id": {
+        "year": "number",
+        "month": "number"
+      },
+      "totalVisits": "number",
+      "uniqueMembers": "number"
+    }
+  ],
+  "heatmapData": [
+    {
+      "_id": {
+        "date": "string",
+        "hour": "number"
+      },
+      "count": "number"
+    }
+  ]
+}
+```
+
+#### Get Financial Analytics
+```http
+GET /api/reports/analytics/financial
+```
+_Requires Authentication Token_
+
+**Response:**
+```json
+{
+  "projections": {
+    "historicalRevenue": [
+      {
+        "_id": {
+          "year": "number",
+          "month": "number"
+        },
+        "revenue": "number"
+      }
+    ],
+    "projectedRevenue": [
+      {
+        "_id": {
+          "year": "number",
+          "month": "number"
+        },
+        "revenue": "number"
+      }
+    ],
+    "growthRate": "number",
+    "upcomingRenewals": [
+      {
+        "amount": "number",
+        "dueDate": "date"
+      }
+    ]
+  },
+  "paymentAnalysis": {
+    "paymentMethods": [
+      {
+        "_id": "string",
+        "count": "number",
+        "total": "number"
+      }
+    ],
+    "paymentTrends": [
+      {
+        "_id": {
+          "year": "number",
+          "month": "number"
+        },
+        "total": "number",
+        "count": "number"
+      }
+    ]
+  },
+  "duePaymentsTrend": [
+    {
+      "_id": {
+        "year": "number",
+        "month": "number"
+      },
+      "totalDue": "number",
+      "count": "number"
+    }
+  ],
+  "profitabilityMetrics": {
+    "totalRevenue": "number",
+    "totalDues": "number",
+    "totalExpenses": "number",
+    "netIncome": "number",
+    "profitMargin": "number"
+  }
+}
+```
+
+#### Query Parameters
+All analytics endpoints support the following optional query parameters:
+- `startDate`: Date (YYYY-MM-DD) - Start date for the analysis period
+- `endDate`: Date (YYYY-MM-DD) - End date for the analysis period
+- `interval`: String (daily, weekly, monthly) - Grouping interval for trend data
+
+#### Error Responses
+- 401: Unauthorized (Invalid or missing token)
+- 403: Forbidden (Insufficient permissions)
+- 404: Not found (Gym not found)
+- 500: Server error
+
+#### Rate Limiting
+Analytics endpoints are rate-limited to:
+- 100 requests per hour per IP
+- 1000 requests per day per gym
 
 ## Middleware
 

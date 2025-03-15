@@ -18,6 +18,7 @@ import attendanceRoutes from "./routes/attendenceRoutes.js";
 import utilsRoutes from "./routes/utilsRoutes.js";
 import userRoutes from "./routes/userRoutes.js";
 import roleRoutes from "./routes/roleRoutes.js";
+import settingsRoutes from './routes/settingsRoutes.js';
 
 // Connect to the database
 try {
@@ -33,19 +34,21 @@ const corsOptions = {
     // Allow requests with no origin (like mobile apps or curl)
     if (!origin) return callback(null, true);
 
-    // Allow any localhost origin in development
-    if (process.env.NODE_ENV !== 'production' && origin.startsWith('http://localhost:')) {
+    // Allow any localhost origin dynamically (both HTTP and HTTPS)
+    const isLocalhost = /^(http|https):\/\/localhost:\d+$/.test(origin);
+    if (isLocalhost) {
       return callback(null, true);
     }
 
-
-    // In production, you might want to restrict to specific origins:
-    const allowedOrigins = process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',') : [];
+    // In production, restrict to specific origins
+    const allowedOrigins = process.env.ALLOWED_ORIGINS
+      ? process.env.ALLOWED_ORIGINS.split(",")
+      : [];
     if (allowedOrigins.includes(origin)) {
       return callback(null, true);
     }
 
-    callback(new Error('Not allowed by CORS'));
+    callback(new Error("Not allowed by CORS"));
   },
   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
   allowedHeaders: [
@@ -69,13 +72,10 @@ app.use(express.urlencoded({ extended: true }));
 // Custom headers middleware
 app.use((req, res, next) => {
   res.header("Access-Control-Allow-Credentials", true);
-  res.header(
-    "Access-Control-Allow-Methods",
-    "GET, PUT, POST, DELETE, OPTIONS"
-  );
+  res.header("Access-Control-Allow-Methods", "GET, PUT, POST, DELETE, OPTIONS");
   res.header(
     "Access-Control-Allow-Headers",
-    "Content-Type, Authorization, Content-Length, X-Requested-With, Accept, Origin"
+    "Content-Type, Authorization, Content-Length, X-Requested-With, Accept, Origin",
   );
   next();
 });
@@ -95,6 +95,7 @@ app.use("/api", attendanceRoutes);
 app.use("/api/utils", utilsRoutes);
 app.use("/api", userRoutes);
 app.use("/api", roleRoutes);
+app.use('/api', settingsRoutes);
 
 // Catch-all for undefined API routes
 app.use("/api/*", (req, res) => {
