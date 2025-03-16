@@ -5,6 +5,23 @@ import Renew from "../models/renew.js";
 import logger from "../utils/logger.js";
 import attachGym from "../middleware/attachGym.js";
 import mongoose from "mongoose";
+import {
+  calculateRetentionRate,
+  calculateChurnRate,
+  analyzePeakHours,
+  calculateRevenueProjections,
+  calculateMembershipGrowth,
+  getMemberDemographics,
+  getMembershipTrends,
+  analyzeWeeklyPatterns,
+  analyzeMonthlyTrends,
+  generateAttendanceHeatmap,
+  analyzePayments,
+  analyzeDuePayments,
+  calculateProfitabilityMetrics,
+} from "../utils/analytics.js";
+import { validateDateParams } from '../utils/dateValidation.js';
+import Member from "../models/member.js";
 
 const router = express.Router();
 
@@ -224,7 +241,6 @@ router.get("/membership", protect, attachGym, async (req, res) => {
   }
 });
 
-
 router.get("/financial", protect, attachGym, async (req, res) => {
   try {
     const gymId = new mongoose.Types.ObjectId(req.gymId);
@@ -253,19 +269,19 @@ router.get("/financial", protect, attachGym, async (req, res) => {
 
       // New query to calculate total due
       member.aggregate([
-        { 
-          $match: { 
+        {
+          $match: {
             gymId,
-            member_total_due_amount: { $gt: 0 }
-          } 
+            member_total_due_amount: { $gt: 0 },
+          },
         },
         {
           $group: {
             _id: null,
             totalDue: { $sum: "$member_total_due_amount" },
-            membersWithDue: { $sum: 1 }
-          }
-        }
+            membersWithDue: { $sum: 1 },
+          },
+        },
       ]),
 
       // Rest of your existing queries...
@@ -313,7 +329,9 @@ router.get("/financial", protect, attachGym, async (req, res) => {
       ]),
     ]);
 
-    const totalRevenue = totalRevenueAgg[0] ? totalRevenueAgg[0].totalRevenue : 0;
+    const totalRevenue = totalRevenueAgg[0]
+      ? totalRevenueAgg[0].totalRevenue
+      : 0;
     const totalDue = totalDueAgg[0] ? totalDueAgg[0].totalDue : 0;
 
     const paymentSummary = {
@@ -336,6 +354,267 @@ router.get("/financial", protect, attachGym, async (req, res) => {
   } catch (error) {
     logger.error(error);
     res.status(500).json({ message: "Server error", error: error.message });
+  }
+});
+
+router.get("/analytics/membership", protect, attachGym, validateDateParams, async (req, res) => {
+  try {
+    const { date, interval } = req.query;
+    const endDate = date ? new Date(date) : new Date();
+    const startDate = new Date(endDate);
+    startDate.setDate(startDate.getDate() - parseInt(interval || 30));
+
+    // Pass these dates to your analytics functions
+    const retentionData = await calculateRetentionRate(req.gymId, startDate, endDate);
+    const churnData = await calculateChurnRate(req.gymId, startDate, endDate);
+    const growthData = await calculateMembershipGrowth(
+      req.gymId,
+      startDate,
+      endDate,
+    );
+    const demographics = await getMemberDemographics(
+      req.gymId,
+      startDate,
+      endDate,
+    );
+    const trends = await getMembershipTrends(req.gymId, startDate, endDate);
+
+    res.json({
+      retention: retentionData,
+      churn: churnData,
+      growth: growthData,
+      demographics,
+      trends,
+    });
+  } catch (error) {
+    logger.error(error);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
+router.get("/analytics/attendance", protect, attachGym, validateDateParams, async (req, res) => {
+    try {
+      const { date, interval } = req.query;
+      const endDate = date ? new Date(date) : new Date();
+      const startDate = new Date(endDate);
+      startDate.setDate(startDate.getDate() - parseInt(interval || 30));
+
+      // Peak Hours Analysis with date range
+      const peakHours = await analyzePeakHours(req.gymId, startDate, endDate);
+
+      // Weekly Patterns with date range
+      const weeklyPatterns = await analyzeWeeklyPatterns(
+        req.gymId,
+        startDate,
+        endDate,
+      );
+
+      // Monthly Trends with date range
+      const monthlyTrends = await analyzeMonthlyTrends(
+        req.gymId,
+        startDate,
+        endDate,
+      );
+
+      // Attendance Heatmap Data with date range
+      const heatmapData = await generateAttendanceHeatmap(
+        req.gymId,
+        startDate,
+        endDate,
+      );
+
+      res.json({
+        peakHours,
+        weeklyPatterns,
+        monthlyTrends,
+        heatmapData,
+        dateRange: {
+          startDate,
+          endDate,
+        },
+      });
+    } catch (error) {
+      logger.error(error);
+      res.status(500).json({ message: "Server error" });
+    }
+  },
+);
+
+router.get("/analytics/financial", protect, attachGym, validateDateParams, async (req, res) => {
+    try {
+      const { date, interval } = req.query;
+      const endDate = date ? new Date(date) : new Date();
+      const startDate = new Date(endDate);
+      startDate.setDate(startDate.getDate() - parseInt(interval || 30));
+
+      // Revenue Projections with date range
+      const projections = await calculateRevenueProjections(
+        req.gymId,
+        startDate,
+        endDate,
+      );
+
+      // Payment Analysis with date range
+      const paymentAnalysis = await analyzePayments(
+        req.gymId,
+        startDate,
+        endDate,
+      );
+
+      // Due Payments Trend with date range
+      const duePaymentsTrend = await analyzeDuePayments(
+        req.gymId,
+        startDate,
+        endDate,
+      );
+
+      // Profitability Metrics with date range
+      const profitabilityMetrics = await calculateProfitabilityMetrics(
+        req.gymId,
+        startDate,
+        endDate,
+      );
+
+      res.json({
+        projections,
+        paymentAnalysis,
+        duePaymentsTrend,
+        profitabilityMetrics,
+        dateRange: {
+          startDate,
+          endDate,
+        },
+      });
+    } catch (error) {
+      logger.error(error);
+      res.status(500).json({ message: "Server error" });
+    }
+  },
+);
+
+router.get('/upcoming-renewals', protect, attachGym, async (req, res) => {
+  try {
+    // Create dates in UTC
+    const today = new Date();
+    today.setUTCHours(0, 0, 0, 0);
+    
+    const sevenDaysFromNow = new Date();
+    sevenDaysFromNow.setDate(today.getDate() + 7);
+    sevenDaysFromNow.setUTCHours(23, 59, 59, 999);
+
+    console.log('Query date range:', {
+      from: today.toISOString(),
+      to: sevenDaysFromNow.toISOString()
+    });
+
+    const upcomingRenewals = await Member.find({
+      membership_end_date: {
+        $gte: today,
+        $lte: sevenDaysFromNow
+      },
+      membership_status: 'Active',
+      gymId: req.gymId
+    }).select('name number membership_type membership_end_date membership_amount');
+
+    console.log('Found renewals:', JSON.stringify(upcomingRenewals, null, 2));
+
+    const totalExpectedRevenue = upcomingRenewals.reduce(
+      (total, member) => total + (member.membership_amount || 0),
+      0
+    );
+
+    res.json({
+      renewals: upcomingRenewals,
+      totalCount: upcomingRenewals.length,
+      totalExpectedRevenue,
+      queryDetails: {
+        dateRange: {
+          from: today,
+          to: sevenDaysFromNow
+        },
+        gymId: req.gymId
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching upcoming renewals:', error);
+    res.status(500).json({ 
+      message: 'Error fetching upcoming renewals',
+      error: error.message
+    });
+  }
+});
+
+router.get('/due-details', protect, attachGym, async (req, res) => {
+  try {
+    // Find all members with due amounts greater than 0
+    const members = await member.find({ 
+      gymId: req.gymId,
+      member_total_due_amount: { $gt: 0 } 
+    })
+    .select('name number member_total_due_amount last_due_payment_date last_payment_date membership_type')
+    .sort({ member_total_due_amount: -1 }); // Sort by highest due amount first
+
+    // Calculate statistics
+    const totalDue = members.reduce((sum, member) => sum + member.member_total_due_amount, 0);
+    const averageDueAmount = members.length > 0 ? totalDue / members.length : 0;
+    const highestDueAmount = members.length > 0 ? members[0].member_total_due_amount : 0;
+    const lowestDueAmount = members.length > 0 ? members[members.length - 1].member_total_due_amount : 0;
+
+    // Get payment history for members with dues
+    const paymentHistory = await Renew.find({
+      gymId: req.gymId,
+      number: { $in: members.map(m => m.number) },
+      is_due_payment: true
+    })
+    .sort({ membership_payment_date: -1 })
+    .limit(50); // Limit to last 50 due payments
+
+    // Group payments by member
+    const memberPayments = {};
+    paymentHistory.forEach(payment => {
+      if (!memberPayments[payment.number]) {
+        memberPayments[payment.number] = [];
+      }
+      memberPayments[payment.number].push({
+        amount: payment.membership_amount,
+        date: payment.membership_payment_date,
+        mode: payment.membership_payment_mode
+      });
+    });
+
+    // Enhance member data with payment history
+    const enhancedMembers = members.map(m => ({
+      _id: m._id,
+      name: m.name,
+      number: m.number,
+      member_total_due_amount: m.member_total_due_amount,
+      membership_type: m.membership_type,
+      last_payment_date: m.last_payment_date,
+      last_due_payment_date: m.last_due_payment_date,
+      payment_history: memberPayments[m.number] || []
+    }));
+
+    res.json({
+      members: enhancedMembers,
+      totalDue,
+      statistics: {
+        totalMembers: members.length,
+        averageDueAmount,
+        highestDueAmount,
+        lowestDueAmount
+      },
+      summary: {
+        totalPaymentsProcessed: paymentHistory.length,
+        recentPayments: paymentHistory.slice(0, 5) // Last 5 payments
+      }
+    });
+
+  } catch (error) {
+    logger.error('Error fetching due details:', error);
+    res.status(500).json({ 
+      message: 'Error fetching due details', 
+      error: error.message 
+    });
   }
 });
 
