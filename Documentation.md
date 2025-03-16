@@ -78,6 +78,274 @@ GET /api/auth/check-role
 
 _Requires Authentication Token_
 
+### Settings Routes (`/api/settings`)
+
+#### Get Settings
+
+```http
+GET /api/settings
+```
+
+_Requires Authentication Token_
+
+**Response:**
+
+```json
+{
+  "gymId": "string",
+  "gymName": "string",
+  "gymAddress": "string",
+  "contactEmail": "string",
+  "contactPhone": "string",
+  "backupFrequency": "string",
+  "retentionPeriod": "number",
+  "notificationsEnabled": "boolean",
+  "maintenanceMode": "boolean"
+}
+```
+
+#### Update Settings
+
+```http
+PUT /api/settings
+```
+
+_Requires Authentication Token_
+
+**Body:**
+
+```json
+{
+  "gymName": "string",
+  "gymAddress": "string",
+  "contactEmail": "string",
+  "contactPhone": "string",
+  "backupFrequency": "string",
+  "retentionPeriod": "number",
+  "notificationsEnabled": "boolean",
+  "maintenanceMode": "boolean"
+}
+```
+
+#### Database Backup Operations
+
+##### Create Backup
+
+```http
+POST /api/settings/backup
+```
+
+_Requires Authentication Token_
+
+##### List Backups
+
+```http
+GET /api/settings/backups
+```
+
+_Requires Authentication Token_
+
+##### Restore from Backup
+
+```http
+POST /api/settings/restore/:filename
+```
+
+_Requires Authentication Token_
+
+##### Upload Backup File
+
+```http
+POST /api/settings/upload-backup
+```
+
+_Requires Authentication Token_
+_Requires multipart/form-data with 'backup' file_
+
+##### Clear Logs
+
+```http
+DELETE /api/settings/logs
+```
+
+_Requires Authentication Token_
+
+### Report Routes (`/api/reports`)
+
+#### Get Membership Report
+
+```http
+GET /api/reports/membership
+```
+
+_Requires Authentication Token_
+
+#### Get Financial Report
+
+```http
+GET /api/reports/financial
+```
+
+_Requires Authentication Token_
+
+#### Get Upcoming Renewals
+
+```http
+GET /api/reports/upcoming-renewals
+```
+
+_Requires Authentication Token_
+
+**Response:**
+
+```json
+{
+  "renewals": [
+    {
+      "name": "string",
+      "number": "string",
+      "membership_type": "string",
+      "membership_end_date": "date",
+      "membership_amount": "number"
+    }
+  ],
+  "totalCount": "number",
+  "totalExpectedRevenue": "number"
+}
+```
+
+#### Get Due Details
+
+```http
+GET /api/reports/due-details
+```
+
+_Requires Authentication Token_
+
+**Response:**
+
+```json
+{
+  "members": [
+    {
+      "_id": "string",
+      "name": "string",
+      "number": "string",
+      "member_total_due_amount": "number",
+      "membership_type": "string",
+      "last_payment_date": "date",
+      "last_due_payment_date": "date",
+      "payment_history": [
+        {
+          "amount": "number",
+          "date": "date",
+          "mode": "string"
+        }
+      ]
+    }
+  ],
+  "statistics": {
+    "totalMembers": "number",
+    "averageDueAmount": "number",
+    "highestDueAmount": "number",
+    "lowestDueAmount": "number"
+  },
+  "summary": {
+    "totalPaymentsProcessed": "number",
+    "recentPayments": []
+  }
+}
+```
+
+### Utility Routes (`/api/utils`)
+
+#### Get All Gyms
+
+```http
+GET /api/utils/gyms
+```
+
+_Requires Authentication Token_
+
+**Response:**
+
+```json
+[
+  {
+    "_id": "string",
+    "name": "string",
+    "address": "string"
+  }
+]
+```
+
+### Data Models
+
+[Previous models remain the same...]
+
+### Settings
+
+```javascript
+{
+  gymId: ObjectId,
+  gymName: String,
+  gymAddress: String,
+  contactEmail: String,
+  contactPhone: String,
+  backupFrequency: String (enum: ['daily', 'weekly', 'monthly']),
+  retentionPeriod: Number,
+  notificationsEnabled: Boolean,
+  maintenanceMode: Boolean,
+  timestamps: true
+}
+```
+
+### Counter
+
+```javascript
+{
+  name: String,
+  seq: Number
+}
+```
+
+### Additional Features
+
+#### Automated Backup System
+
+- Configurable backup frequency (daily/weekly/monthly)
+- Retention period management
+- Automated cleanup of old backups
+- Manual backup/restore capabilities
+
+#### Image Processing
+
+- Automatic image resizing and optimization
+- Support for multiple image formats
+- Size limits and validation
+
+#### Data Validation
+
+- Pre-save hooks for data validation
+- Custom validators for membership types
+- Automatic ID generation for members and renewals
+
+#### Security Enhancements
+
+- Role-based access control
+- Granular permissions system
+- Gym-specific data isolation
+- Input sanitization and validation
+
+#### Logging System
+
+- Detailed error logging
+- Activity tracking
+- Debug information logging
+- Log rotation and management
+
+---
+
 ### Member Routes (`/api/member`)
 
 #### Create Member
@@ -563,12 +831,15 @@ _Requires Authentication Token_
 ### Analytics Routes (`/api/reports/analytics`)
 
 #### Get Membership Analytics
+
 ```http
 GET /api/reports/analytics/membership
 ```
+
 _Requires Authentication Token_
 
 **Response:**
+
 ```json
 {
   "retention": {
@@ -653,12 +924,15 @@ _Requires Authentication Token_
 ```
 
 #### Get Attendance Analytics
+
 ```http
 GET /api/reports/analytics/attendance
 ```
+
 _Requires Authentication Token_
 
 **Response:**
+
 ```json
 {
   "peakHours": {
@@ -712,12 +986,15 @@ _Requires Authentication Token_
 ```
 
 #### Get Financial Analytics
+
 ```http
 GET /api/reports/analytics/financial
 ```
+
 _Requires Authentication Token_
 
 **Response:**
+
 ```json
 {
   "projections": {
@@ -787,19 +1064,24 @@ _Requires Authentication Token_
 ```
 
 #### Query Parameters
+
 All analytics endpoints support the following optional query parameters:
+
 - `startDate`: Date (YYYY-MM-DD) - Start date for the analysis period
 - `endDate`: Date (YYYY-MM-DD) - End date for the analysis period
 - `interval`: String (daily, weekly, monthly) - Grouping interval for trend data
 
 #### Error Responses
+
 - 401: Unauthorized (Invalid or missing token)
 - 403: Forbidden (Insufficient permissions)
 - 404: Not found (Gym not found)
 - 500: Server error
 
 #### Rate Limiting
+
 Analytics endpoints are rate-limited to:
+
 - 100 requests per hour per IP
 - 1000 requests per day per gym
 

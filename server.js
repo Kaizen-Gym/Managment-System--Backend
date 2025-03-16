@@ -18,12 +18,16 @@ import attendanceRoutes from "./routes/attendenceRoutes.js";
 import utilsRoutes from "./routes/utilsRoutes.js";
 import userRoutes from "./routes/userRoutes.js";
 import roleRoutes from "./routes/roleRoutes.js";
-import settingsRoutes from './routes/settingsRoutes.js';
+import settingsRoutes from "./routes/settingsRoutes.js";
+
+// utils
+import { initializeScheduledTasks } from "./utils/scheduler.js";
 
 // Connect to the database
 try {
   logger.info("Connecting to the database...");
   await mongoose.connect(process.env.MongoDB, {});
+  await initializeScheduledTasks();
 } catch (error) {
   logger.error("Error connecting to the database: ", error);
   process.exit(1);
@@ -95,7 +99,7 @@ app.use("/api", attendanceRoutes);
 app.use("/api/utils", utilsRoutes);
 app.use("/api", userRoutes);
 app.use("/api", roleRoutes);
-app.use('/api', settingsRoutes);
+app.use("/api", settingsRoutes);
 
 // Catch-all for undefined API routes
 app.use("/api/*", (req, res) => {
