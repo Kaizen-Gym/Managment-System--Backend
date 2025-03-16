@@ -11,12 +11,15 @@ on:
 jobs:
   count-loc:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          persist-credentials: false  # Disable default credentials so our push action uses its own token
+          persist-credentials: false  # So that our push and PR actions can use their own token
 
       - name: Install cloc
         run: sudo apt-get install -y cloc
@@ -36,8 +39,19 @@ jobs:
           # Commit only if there are changes; if none, don't error out
           git commit -m "Update cloc report [$(date)]" || echo "No changes to commit"
 
-      - name: Push changes
-        uses: ad-m/github-push-action@v0.6.0
+      - name: Push changes to dedicated branch
+        run: |
+          # Set branch name; you could include date/time for uniqueness if needed
+          BRANCH="cloc-report-update"
+          # Create the branch if it doesn't exist and push changes
+          git push origin HEAD:$BRANCH
+
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v4
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          branch: main
+          token: ${{ secrets.GITHUB_TOKEN }}
+          branch: cloc-report-update  # The branch containing your changes
+          base: main                 # The branch you want to merge into
+          title: "Automated PR: Update cloc report"
+          body: "This PR updates the cloc report with the latest changes."
+          commit-message: "Update cloc report [$(date)]"
