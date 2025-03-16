@@ -5,8 +5,8 @@ on:
     branches:
       - main
   schedule:
-    - cron: '0 0 * * *' # Runs daily at midnight UTC
-  workflow_dispatch: # Allows manual trigger
+    - cron: '0 0 * * *'  # Runs daily at midnight UTC
+  workflow_dispatch:
 
 jobs:
   count-loc:
@@ -15,6 +15,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false  # Disable default credentials so our push action uses its own token
 
       - name: Install cloc
         run: sudo apt-get install -y cloc
@@ -26,12 +28,15 @@ jobs:
           echo "" >> cloc_report.txt
           echo "Generated on: $(date)" >> cloc_report.txt
 
-      - name: Commit and push report
+      - name: Commit changes
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git add cloc_report.txt
-          git commit -m "Update cloc report [$(date)]" || exit 0
-          # Set the remote URL with the token embedded
-          git remote set-url origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
-          git push
+          # Commit only if there are changes; if none, don't error out
+          git commit -m "Update cloc report [$(date)]" || echo "No changes to commit"
+
+      - name: Push changes
+        uses: ad-m/github-push-action@v0.6.0
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
