@@ -45,7 +45,7 @@ router.post(
         membership_due_amount,
         membership_payment_status,
         membership_payment_mode,
-        membership_payment_date
+        membership_payment_date,
       } = req.body;
 
       if (
@@ -58,7 +58,7 @@ router.post(
           membership_amount,
           membership_payment_status,
           membership_payment_mode,
-          membership_payment_date
+          membership_payment_date,
         ].every(Boolean)
       ) {
         return res
@@ -85,9 +85,13 @@ router.post(
       const paidamount = parsedAmount - parseddueamount;
 
       const currentDate = new Date();
-      const membership_start_date = new Date(
-        membership_payment_date || currentDate,
-      );
+      const membership_start_date = new Date(membership_payment_date);
+
+      if (isNaN(membership_start_date.getTime())) {
+        return res.status(400).json({
+          message: "Invalid membership payment date format",
+        });
+      }
 
       // Calculate expiry date based on membership type
       const membershipDurations = { Monthly: 1, Quarterly: 3, Yearly: 12 };
@@ -115,6 +119,14 @@ router.post(
         }
       }
 
+      // check if the end date is before the current date and if it is then the status is "Inactive"
+      let membership_status;
+      if (membership_end_date < new Date()) {
+        membership_status = "Expired";
+      } else {
+        membership_status = "Active";
+      }
+
       // Create member record with gymId
       await member.create({
         name,
@@ -132,7 +144,7 @@ router.post(
         membership_payment_date: currentDate,
         membership_payment_mode,
         membership_end_date,
-        membership_status: "Active",
+        membership_status,
         membership_duration,
         gymId: req.gymId,
         photo: { data: photoData, contentType: photoContentType }, // Save the processed image
@@ -167,16 +179,21 @@ router.get("/members", protect, attachGym, async (req, res) => {
     return res.status(400).json({ message: "Gym ID is required" });
   }
   try {
-    let { page = 1, limit = 10 } = req.query;
+    let { page = 1, limit = 10, status = 'all' } = req.query;
     page = Math.max(parseInt(page, 10), 1);
     limit = Math.max(parseInt(limit, 10), 1);
 
+    const filter = { gymId: req.gymId };
+    if (status !== "all") {
+      filter.membership_status = new RegExp(`^${status}$`, 'i');
+    }
+
     const members = await member
-      .find({ gymId: req.gymId })
+      .find(filter)
       .skip((page - 1) * limit)
       .limit(limit);
 
-    const total = await member.countDocuments({ gymId: req.gymId });
+    const total = await member.countDocuments(filter);
 
     res.status(200).json({
       members,

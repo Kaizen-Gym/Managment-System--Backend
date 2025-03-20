@@ -359,7 +359,7 @@ router.get("/financial", protect, attachGym, async (req, res) => {
 
 router.get("/analytics/membership", protect, attachGym, validateDateParams, async (req, res) => {
   try {
-    const { date, interval } = req.query;
+    const { date, interval, } = req.query;
     const endDate = date ? new Date(date) : new Date();
     const startDate = new Date(endDate);
     startDate.setDate(startDate.getDate() - parseInt(interval || 30));

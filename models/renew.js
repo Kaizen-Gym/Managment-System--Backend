@@ -30,7 +30,7 @@ const renewSchema = new mongoose.Schema({
   membership_payment_date: { type: Date, default: Date.now },
   membership_payment_mode: {
     type: String,
-    enum: ["Cash", "Card", "Online"],
+    enum: ["Cash", "Card", "UPI", "Bank Transfer"],
     required: true,
   },
   membership_end_date: { type: Date, required: true },

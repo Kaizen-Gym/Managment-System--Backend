@@ -4,7 +4,7 @@ import Counter from "./Counter.js";
 const memberScheme = new mongoose.Schema({
   id: { type: String, unique: true },
   name: { type: String, required: true },
-  gender: { type: String, enum: ["Male", "Female", "Other"], required: true },
+  gender: { type: String, enum: ["Male", "Female", "Other", "male", "female", "other"], required: true },
   age: { type: Number, required: true, min: 14 },
   email: { type: String, unique: true },
   number: { type: String, required: true, unique: true },
@@ -47,7 +47,7 @@ const memberScheme = new mongoose.Schema({
   membership_payment_date: { type: Date },
   membership_payment_mode: {
     type: String,
-    enum: ["Cash", "Card", "Online"],
+    enum: ["Cash", "Card", "UPI", "Bank Transfer"],
     required: false,
   },
   membership_payment_reference: { type: String, required: false },
