@@ -502,11 +502,6 @@ router.get('/upcoming-renewals', protect, attachGym, async (req, res) => {
     sevenDaysFromNow.setDate(today.getDate() + 7);
     sevenDaysFromNow.setUTCHours(23, 59, 59, 999);
 
-    console.log('Query date range:', {
-      from: today.toISOString(),
-      to: sevenDaysFromNow.toISOString()
-    });
-
     const upcomingRenewals = await Member.find({
       membership_end_date: {
         $gte: today,
@@ -515,8 +510,6 @@ router.get('/upcoming-renewals', protect, attachGym, async (req, res) => {
       membership_status: 'Active',
       gymId: req.gymId
     }).select('name number membership_type membership_end_date membership_amount');
-
-    console.log('Found renewals:', JSON.stringify(upcomingRenewals, null, 2));
 
     const totalExpectedRevenue = upcomingRenewals.reduce(
       (total, member) => total + (member.membership_amount || 0),
@@ -536,7 +529,7 @@ router.get('/upcoming-renewals', protect, attachGym, async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('Error fetching upcoming renewals:', error);
+    logger.error('Error fetching upcoming renewals:', error);
     res.status(500).json({ 
       message: 'Error fetching upcoming renewals',
       error: error.message

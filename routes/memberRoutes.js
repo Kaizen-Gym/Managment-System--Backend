@@ -179,13 +179,13 @@ router.get("/members", protect, attachGym, async (req, res) => {
     return res.status(400).json({ message: "Gym ID is required" });
   }
   try {
-    let { page = 1, limit = 10, status = 'all' } = req.query;
+    let { page = 1, limit = 10, status = "all" } = req.query;
     page = Math.max(parseInt(page, 10), 1);
     limit = Math.max(parseInt(limit, 10), 1);
 
     const filter = { gymId: req.gymId };
     if (status !== "all") {
-      filter.membership_status = new RegExp(`^${status}$`, 'i');
+      filter.membership_status = new RegExp(`^${status}$`, "i");
     }
 
     const members = await member
@@ -525,6 +525,57 @@ router.get("/membership-form/:number", protect, attachGym, async (req, res) => {
       .json({ message: "Membership form data", member: memberRecord });
   } catch (error) {
     logger.error("Error fetching membership form:", error);
+    res.status(500).json({ message: "Server error", error: error.message });
+  }
+});
+
+//A complete search feature
+// POST /api/member/search - Get search results
+router.post("/search", protect, attachGym, async (req, res) => {
+  try {
+    const { query } = req.body;
+
+    // Validate if query exists and is not empty
+    if (!query || typeof query !== "string") {
+      return res.status(400).json({
+        message: "Invalid search query. Query must be a non-empty string.",
+      });
+    }
+
+    const gymId = req.gymId;
+
+    // Using regex for partial matches
+    const searchRegex = new RegExp(query, "i"); // 'i' flag for case-insensitive
+
+    const members = await member.find(
+      {
+        gymId: gymId,
+        $or: [
+          { name: searchRegex },
+          { email: searchRegex },
+          { number: searchRegex },
+          { membership_type: searchRegex },
+          { id: searchRegex },
+        ],
+      },
+      {
+        // Only return necessary fields
+        name: 1,
+        email: 1,
+        number: 1,
+        membership_type: 1,
+        membership_status: 1,
+        membership_end_date: 1,
+        id: 1,
+      }
+    ).lean();
+
+    res.status(200).json({
+      count: members.length,
+      members,
+    });
+  } catch (error) {
+    logger.error("Error searching members:", error);
     res.status(500).json({ message: "Server error", error: error.message });
   }
 });

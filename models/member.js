@@ -4,7 +4,11 @@ import Counter from "./Counter.js";
 const memberScheme = new mongoose.Schema({
   id: { type: String, unique: true },
   name: { type: String, required: true },
-  gender: { type: String, enum: ["Male", "Female", "Other", "male", "female", "other"], required: true },
+  gender: {
+    type: String,
+    enum: ["Male", "Female", "Other", "male", "female", "other"],
+    required: true,
+  },
   age: { type: Number, required: true, min: 14 },
   email: { type: String, unique: true },
   number: { type: String, required: true, unique: true },
@@ -54,6 +58,14 @@ const memberScheme = new mongoose.Schema({
 
   gymId: { type: mongoose.Schema.Types.ObjectId, ref: "Gym", required: true },
 });
+
+// In your Member model
+memberScheme.index({ name: 1 });
+memberScheme.index({ email: 1 });
+memberScheme.index({ number: 1 });
+memberScheme.index({ id: 1 });
+memberScheme.index({ membership_type: 1 });
+memberScheme.index({ gymId: 1 }); // Important for filtering by gym
 
 // Add a pre-save middleware to set amount and duration from the plan
 memberScheme.pre("save", async function (next) {

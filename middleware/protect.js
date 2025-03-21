@@ -1,36 +1,49 @@
-import jwt from 'jsonwebtoken';
-import logger from '../utils/logger.js';
-import env from 'dotenv';
-import User from '../models/user.js';
-env.config();
+import jwt from "jsonwebtoken";
+import logger from "../utils/logger.js";
+import User from "../models/user.js";
 
 const protect = async (req, res, next) => {
-    // Check for authorization header and extract the token
-    let token = null;
-    if (req.headers.authorization && req.headers.authorization.startsWith("Bearer")) {
-        token = req.headers.authorization.split(" ")[1]?.trim(); // ensure token is trimmed
-    }
+  try {
+    const token = req.cookies.accessToken;
 
-    // If no token was provided, return 401
     if (!token) {
-        logger.error("Not authorized, no token provided");
-        return res.status(402).json({ message: "Not authorized, no token provided" });
+      logger.warn("No token found in cookies");
+      return res.status(401).json({ message: "Not authorized, please login" });
     }
 
-    // Verify the token
     try {
-        const decoded = jwt.verify(token, process.env.JWT_SECRET);
-        const user = await User.findById(decoded.id);
-        if (!user) {
-            return res.status(404).json({ message: "Not authorized" });
-        }
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      const user = await User.findById(decoded.id);
 
-        req.user = user;
-        next();
-    } catch (error) {
-        logger.error("Not authorized, token failed", error);
-        return res.status(401).json({ message: "Not authorized, token failed" });
+      if (!user) {
+        logger.warn(`No user found with ID: ${decoded.id}`);
+        return res.status(401).json({ message: "User not found" });
+      }
+
+      req.user = user;
+      next();
+    } catch (jwtError) {
+      logger.error("JWT Verification Error:", jwtError);
+      
+      if (jwtError.name === "TokenExpiredError") {
+        return res.status(401).json({ 
+          message: "Session expired, please login again",
+          error: "TOKEN_EXPIRED"
+        });
+      }
+
+      return res.status(401).json({ 
+        message: "Invalid session",
+        error: jwtError.message
+      });
     }
+  } catch (error) {
+    logger.error("Protect Middleware Error:", error);
+    res.status(401).json({ 
+      message: "Authentication failed",
+      error: error.message
+    });
+  }
 };
 
 export default protect;
