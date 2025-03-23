@@ -8,6 +8,7 @@ import protect from "../middleware/protect.js";
 import attachGym from "../middleware/attachGym.js";
 import mongoose from "mongoose";
 import moment from "moment";
+import { AppError, handleError } from '../utils/errorHandler.js';
 
 const router = express.Router();
 
@@ -61,25 +62,19 @@ router.post(
           membership_payment_date,
         ].every(Boolean)
       ) {
-        return res
-          .status(400)
-          .json({ message: "All required fields must be filled" });
+        throw new AppError('All required fields must be filled', 400);
       }
 
       // Check if user exists in the current gym
       if (await member.exists({ number, email, gymId: req.gymId })) {
-        return res.status(409).json({ message: "User already exists" });
+        throw new AppError('member already exists', 409);
       }
 
       const parsedAmount = Number(membership_amount);
       const parseddueamount = Number(membership_due_amount);
-      logger.info(
-        `Membership amount: ${parsedAmount}, Due amount: ${parseddueamount}`,
-      );
+
       if (isNaN(parsedAmount) || isNaN(parseddueamount)) {
-        return res.status(400).json({
-          message: "Membership amount and due amount must be numbers",
-        });
+        throw new AppError('Membership amount and due amount must be numbers', 400);
       }
 
       const paidamount = parsedAmount - parseddueamount;
@@ -162,11 +157,11 @@ router.post(
         membership_end_date,
         gymId: req.gymId,
       });
-
+      
+      logger.info(`New member created: ${name} (${number}) at gym ${req.gymId}`);
       res.status(201).json({ message: "User created successfully" });
     } catch (error) {
-      logger.error(error);
-      res.status(500).json({ message: "Server error", error: error.message });
+      handleError(error, req, res);
     }
   },
 );
@@ -175,10 +170,11 @@ router.post(
 
 // Get all members for the current gym (with pagination)
 router.get("/members", protect, attachGym, async (req, res) => {
-  if (!req.gymId) {
-    return res.status(400).json({ message: "Gym ID is required" });
-  }
   try {
+    if (!req.gymId) {
+      throw new AppError('Gym ID is required', 400);
+    }
+
     let { page = 1, limit = 10, status = "all" } = req.query;
     page = Math.max(parseInt(page, 10), 1);
     limit = Math.max(parseInt(limit, 10), 1);
@@ -195,6 +191,7 @@ router.get("/members", protect, attachGym, async (req, res) => {
 
     const total = await member.countDocuments(filter);
 
+    logger.info(`Retrieved ${members.length} members for gym ${req.gymId}`);
     res.status(200).json({
       members,
       total,
@@ -202,26 +199,28 @@ router.get("/members", protect, attachGym, async (req, res) => {
       totalPages: Math.ceil(total / limit),
     });
   } catch (error) {
-    logger.error(error);
-    res.status(500).json({ message: "Server error", error: error.message });
+    handleError(error, req, res);
   }
 });
 
 // Get a single member by phone number for the current gym
 router.get("/members/:number", protect, attachGym, async (req, res) => {
-  if (!req.gymId) {
-    return res.status(400).json({ message: "Gym ID is required" });
-  }
   try {
+    if (!req.gymId) {
+      throw new AppError('Gym ID is required', 400);
+    }
+
     const { number } = req.params;
     const memberInfo = await member.findOne({ number, gymId: req.gymId });
+    
     if (!memberInfo) {
-      return res.status(404).json({ message: "User does not exist" });
+      throw new AppError('User does not exist', 404);
     }
+
+    logger.info(`Retrieved member details for ${number} at gym ${req.gymId}`);
     res.status(200).json(memberInfo);
   } catch (error) {
-    logger.error(error);
-    res.status(500).json({ message: "Server error", error: error.message });
+    handleError(error, req, res);
   }
 });
 
@@ -229,15 +228,17 @@ router.get("/members/:number", protect, attachGym, async (req, res) => {
 router.delete("/members/:number", protect, attachGym, async (req, res) => {
   try {
     const { number } = req.params;
-    const userExists = await member.findOne({ number, gymId: req.gymId });
-    if (!userExists) {
-      return res.status(404).json({ message: "User does not exist" });
+    const memberToDelete = await member.findOne({ number, gymId: req.gymId });
+    
+    if (!memberToDelete) {
+      throw new AppError('User does not exist', 404);
     }
+
     await member.findOneAndDelete({ number, gymId: req.gymId });
+    logger.info(`Deleted member ${number} from gym ${req.gymId}`);
     res.status(200).json({ message: "User deleted successfully" });
   } catch (error) {
-    logger.error("Error deleting member:", error);
-    res.status(500).json({ message: "Server error", error: error.message });
+    handleError(error, req, res);
   }
 });
 
@@ -253,7 +254,7 @@ router.put(
       const { number } = req.params;
       const userExists = await member.findOne({ number, gymId: req.gymId });
       if (!userExists) {
-        return res.status(404).json({ message: "User does not exist" });
+        throw new AppError('User does not exist', 404);
       }
 
       const updateData = req.body;
@@ -372,31 +373,16 @@ router.put(
         }
       }
 
+      logger.info(`Updated member ${number} at gym ${req.gymId}`);
       res.status(200).json({
         message: "Member updated successfully",
         member: updatedMember,
       });
     } catch (error) {
-      logger.error(error);
-      res.status(500).json({ message: "Server error", error: error.message });
+      handleError(error, req, res);
     }
   },
 );
-
-// GET /api/member/member/:number - Get a single member by phone number (alternative route) for the current gym
-router.get("/member/:number", protect, attachGym, async (req, res) => {
-  try {
-    const { number } = req.params;
-    const memberInfo = await member.findOne({ number, gymId: req.gymId });
-    if (!memberInfo) {
-      return res.status(404).json({ message: "User does not exist" });
-    }
-    res.status(200).json(memberInfo);
-  } catch (error) {
-    logger.error(error);
-    res.status(500).json({ message: "Server error", error: error.message });
-  }
-});
 
 // POST /api/member/transfer - Add membership days from one member to another
 router.post("/transfer", protect, attachGym, async (req, res) => {
@@ -414,7 +400,7 @@ router.post("/transfer", protect, attachGym, async (req, res) => {
     });
 
     if (!source_member || !target_member) {
-      return res.status(404).json({ message: "One or both members not found" });
+      throw new AppError('One or both members not found', 404);
     }
 
     if (
@@ -464,12 +450,12 @@ router.post("/transfer", protect, attachGym, async (req, res) => {
     await source_member.save();
     await target_member.save();
 
+    logger.info(`Transferred membership days from ${source_number} to ${target_number} at gym ${req.gymId}`);
     res
       .status(200)
       .json({ message: "Membership days transferred successfully" });
   } catch (error) {
-    logger.error(error);
-    res.status(500).json({ message: "Server error", error: error.message });
+    handleError(error, req, res);
   }
 });
 
@@ -481,11 +467,11 @@ router.post("/complimentary-days", protect, attachGym, async (req, res) => {
 
     const memberRecord = await member.findOne({ number, gymId });
     if (!memberRecord) {
-      return res.status(404).json({ message: "Member not found" });
+      throw new AppError('Member not found', 404);
     }
 
     if (isNaN(days) || days <= 0) {
-      return res.status(400).json({ message: "Invalid number of days" });
+      throw new AppError('Invalid number of days', 400);
     }
 
     const currentExpiryDate = memberRecord.membership_end_date
@@ -496,14 +482,14 @@ router.post("/complimentary-days", protect, attachGym, async (req, res) => {
     memberRecord.membership_end_date = newExpiryDate;
     memberRecord.membership_status = "Active"; // Ensure member is active
     await memberRecord.save();
-
+    
+    logger.info(`Added ${days} complimentary days to member ${number} at gym ${req.gymId}`);
     res.status(200).json({
       message: `${days} complimentary days added successfully`,
       newExpiryDate,
     });
   } catch (error) {
-    logger.error("Error adding complimentary days:", error);
-    res.status(500).json({ message: "Server error", error: error.message });
+    handleError(error, req, res);
   }
 });
 
@@ -515,7 +501,7 @@ router.get("/membership-form/:number", protect, attachGym, async (req, res) => {
 
     const memberRecord = await member.findOne({ number, gymId });
     if (!memberRecord) {
-      return res.status(404).json({ message: "Member not found" });
+      throw new AppError('Member not found', 404);
     }
 
     // In a real implementation, you would generate or retrieve a membership form here.
@@ -524,8 +510,7 @@ router.get("/membership-form/:number", protect, attachGym, async (req, res) => {
       .status(200)
       .json({ message: "Membership form data", member: memberRecord });
   } catch (error) {
-    logger.error("Error fetching membership form:", error);
-    res.status(500).json({ message: "Server error", error: error.message });
+    handleError(error, req, res);
   }
 });
 
@@ -537,9 +522,7 @@ router.post("/search", protect, attachGym, async (req, res) => {
 
     // Validate if query exists and is not empty
     if (!query || typeof query !== "string") {
-      return res.status(400).json({
-        message: "Invalid search query. Query must be a non-empty string.",
-      });
+      throw new AppError('Invalid search query. Query must be a non-empty string.', 400);
     }
 
     const gymId = req.gymId;
@@ -569,14 +552,14 @@ router.post("/search", protect, attachGym, async (req, res) => {
         id: 1,
       }
     ).lean();
-
+    
+    logger.info(`Search performed with query "${query}" at gym ${req.gymId}`);
     res.status(200).json({
       count: members.length,
       members,
     });
   } catch (error) {
-    logger.error("Error searching members:", error);
-    res.status(500).json({ message: "Server error", error: error.message });
+    handleError(error, req, res);
   }
 });
 

@@ -4,6 +4,8 @@ import multer from "multer"; // Import multer
 import sharp from "sharp";
 import protect from "../middleware/protect.js";
 import attachGym from "../middleware/attachGym.js";
+import { handleError, AppError } from "../utils/errorHandler.js";
+import logger from "../utils/logger.js";
 
 const router = express.Router();
 
@@ -46,7 +48,7 @@ router.post(
       experience === undefined ||
       !schedule
     ) {
-      return res.status(400).json({ message: "All fields are required" });
+      throw new AppError("All fields are required", 400);
     }
 
     try {
@@ -56,9 +58,7 @@ router.post(
         gymId: req.gymId,
       });
       if (existingTrainer) {
-        return res.status(409).json({
-          message: "A trainer with this email or number number already exists",
-        });
+        throw new AppError("A trainer with this email or number already exists", 409);
       }
 
       // Process photo upload
@@ -75,7 +75,7 @@ router.post(
           photoContentType = "image/jpeg"; // Or req.file.mimetype if you preserve original
         } catch (sharpError) {
           console.error("Error processing image with sharp:", sharpError);
-          return res.status(500).json({ message: "Error processing image" });
+          throw new AppError("Error processing image", 500);
         }
       }
 
@@ -94,8 +94,7 @@ router.post(
       await newTrainer.save();
       res.status(201).json(newTrainer);
     } catch (error) {
-      console.error(error);
-      res.status(500).json({ message: "Server error", error: error.message });
+      handleError(error, req, res);
     }
   },
 );
@@ -103,10 +102,11 @@ router.post(
 router.get("/trainers", protect, attachGym, async (req, res) => {
   try {
     const trainers = await Trainer.find({ gymId: req.gymId });
+    logger.info(`Retrieved ${trainers.length} trainers for gym ${req.gymId}`);
     res.json(trainers);
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: "Server error", error: error.message });
+    logger.error(`Error retrieving trainers for gym ${req.gymId}: ${error.message}`);
+    handleError(error, req, res)
   }
 });
 
@@ -117,12 +117,12 @@ router.get("/trainer/:id", protect, attachGym, async (req, res) => {
       gymId: req.gymId,
     });
     if (!trainer) {
-      return res.status(404).json({ message: "Trainer not found" });
+      throw new AppError("Trainer not found", 404);
     }
+    logger.info(`Retrieved trainer ${trainer._id} for gym ${req.gymId}`);
     res.json(trainer);
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: "Server error", error: error.message });
+    handleError(error, req, res);
   }
 });
 
@@ -138,7 +138,7 @@ router.put(
         gymId: req.gymId,
       });
       if (!trainer) {
-        return res.status(404).json({ message: "Trainer not found" });
+        throw new AppError("Trainer not found", 404);
       }
 
       const {
@@ -172,16 +172,16 @@ router.put(
             contentType: "image/jpeg", // Or req.file.mimetype
           };
         } catch (sharpError) {
-          console.error("Error processing image with sharp:", sharpError);
-          return res.status(500).json({ message: "Error processing image" });
+          logger.error("Error processing image with sharp:", sharpError);
+          throw new AppError("Error processing image", 500);
         }
       }
 
       await trainer.save();
+      logger.info("Trainer updated successfully");
       res.json(trainer);
     } catch (error) {
-      console.error(error);
-      res.status(500).json({ message: "Server error", error: error.message });
+      handleError(error, req, res);
     }
   },
 );
@@ -193,14 +193,13 @@ router.delete("/trainer/:id", protect, attachGym, async (req, res) => {
       gymId: req.gymId,
     });
     if (!trainer) {
-      return res.status(404).json({ message: "Trainer not found" });
+      throw new AppError("Trainer not found", 404);
     }
 
     await Trainer.deleteOne({ _id: trainer._id, gymId: req.gymId });
     res.json({ message: "Trainer removed" });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: "Server error", error: error.message });
+    handleError(error, req, res);
   }
 });
 

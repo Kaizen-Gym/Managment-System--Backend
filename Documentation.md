@@ -1,22 +1,25 @@
-# Gym Management System Backend Documentation
+# Kaizen Gym Management System API Documentation
 
-## Overview
+## Introduction
 
-This backend system provides a RESTful API for managing gym operations including member management, trainer management, attendance tracking, membership plans, reporting, and user management, including photo uploads for members and trainers.
+The Kaizen Gym Management System is a comprehensive solution designed to streamline operations for fitness centers and gyms. This robust platform enables efficient management of memberships, attendance tracking, financial reporting, and automated system maintenance.
 
-## Technologies Used
+Developed for Kaizen, this system provides gym owners and staff with powerful tools for member management, payment processing, attendance tracking, and detailed analytics to make data-driven business decisions.
 
-- Node.js
-- Express.js
-- MongoDB (with Mongoose)
-- JSON Web Tokens (JWT)
-- CORS
-- Multer (for file uploads)
-- Sharp (for image processing)
+## System Architecture
+
+The application follows a modern client-server architecture with:
+
+- **Backend**: Node.js with Express framework
+- **Database**: MongoDB
+- **Authentication**: JWT-based authentication system
+- **Security**: CSRF protection, HTTP-only cookies
+- **Logging**: Winston logger with daily log rotation
+- **Automated Jobs**: Node-schedule for membership status updates and database backups
 
 ## API Endpoints
 
-### Authentication Routes (`/api/auth`)
+### Authentication
 
 #### Register User
 
@@ -39,7 +42,24 @@ POST /api/auth/register
 }
 ```
 
-#### Login
+**Response:**
+
+```json
+{
+  "_id": "string",
+  "name": "string",
+  "number": "string",
+  "email": "string",
+  "role": "string",
+  "permissions": ["string"],
+  "token": {
+    "accessToken": "string",
+    "refreshToken": "string"
+  }
+}
+```
+
+#### Login User
 
 ```http
 POST /api/auth/login
@@ -54,21 +74,93 @@ POST /api/auth/login
 }
 ```
 
+**Response:**
+
+```json
+{
+  "_id": "string",
+  "name": "string",
+  "email": "string",
+  "role": "string",
+  "permissions": ["string"],
+  "gymId": "string"
+}
+```
+
+#### Verify Session
+
+```http
+GET /api/auth/session
+```
+
+**Response:**
+
+```json
+{
+  "authenticated": true,
+  "user": {
+    "_id": "string",
+    "name": "string",
+    "email": "string",
+    "role": "string",
+    "permissions": ["string"],
+    "gymId": "string"
+  }
+}
+```
+
+#### Refresh Token
+
+```http
+POST /api/auth/refresh-token
+```
+
+**Response:**
+
+```json
+{
+  "success": true
+}
+```
+
 #### Logout
 
 ```http
 POST /api/auth/logout
 ```
 
-_Requires Authentication Token_
+**Response:**
 
-#### Get Profile
+```json
+{
+  "message": "Logged out successfully"
+}
+```
+
+#### Get User Profile
 
 ```http
 GET /api/auth/profile
 ```
 
-_Requires Authentication Token_
+**Response:**
+
+```json
+{
+  "_id": "string",
+  "name": "string",
+  "email": "string",
+  "number": "string",
+  "user_type": "string",
+  "permissions": ["string"],
+  "createdAt": "date",
+  "gymId": {
+    "_id": "string",
+    "name": "string",
+    "address": "string"
+  }
+}
+```
 
 #### Check User Role
 
@@ -76,301 +168,44 @@ _Requires Authentication Token_
 GET /api/auth/check-role
 ```
 
-_Requires Authentication Token_
-
-### Settings Routes (`/api/settings`)
-
-#### Get Settings
-
-```http
-GET /api/settings
-```
-
-_Requires Authentication Token_
-
 **Response:**
 
 ```json
 {
-  "gymId": "string",
-  "gymName": "string",
-  "gymAddress": "string",
-  "contactEmail": "string",
-  "contactPhone": "string",
-  "backupFrequency": "string",
-  "retentionPeriod": "number",
-  "notificationsEnabled": "boolean",
-  "maintenanceMode": "boolean"
+  "role": "string"
 }
 ```
 
-#### Update Settings
+### Member Management
 
-```http
-PUT /api/settings
-```
-
-_Requires Authentication Token_
-
-**Body:**
-
-```json
-{
-  "gymName": "string",
-  "gymAddress": "string",
-  "contactEmail": "string",
-  "contactPhone": "string",
-  "backupFrequency": "string",
-  "retentionPeriod": "number",
-  "notificationsEnabled": "boolean",
-  "maintenanceMode": "boolean"
-}
-```
-
-#### Database Backup Operations
-
-##### Create Backup
-
-```http
-POST /api/settings/backup
-```
-
-_Requires Authentication Token_
-
-##### List Backups
-
-```http
-GET /api/settings/backups
-```
-
-_Requires Authentication Token_
-
-##### Restore from Backup
-
-```http
-POST /api/settings/restore/:filename
-```
-
-_Requires Authentication Token_
-
-##### Upload Backup File
-
-```http
-POST /api/settings/upload-backup
-```
-
-_Requires Authentication Token_
-_Requires multipart/form-data with 'backup' file_
-
-##### Clear Logs
-
-```http
-DELETE /api/settings/logs
-```
-
-_Requires Authentication Token_
-
-### Report Routes (`/api/reports`)
-
-#### Get Membership Report
-
-```http
-GET /api/reports/membership
-```
-
-_Requires Authentication Token_
-
-#### Get Financial Report
-
-```http
-GET /api/reports/financial
-```
-
-_Requires Authentication Token_
-
-#### Get Upcoming Renewals
-
-```http
-GET /api/reports/upcoming-renewals
-```
-
-_Requires Authentication Token_
-
-**Response:**
-
-```json
-{
-  "renewals": [
-    {
-      "name": "string",
-      "number": "string",
-      "membership_type": "string",
-      "membership_end_date": "date",
-      "membership_amount": "number"
-    }
-  ],
-  "totalCount": "number",
-  "totalExpectedRevenue": "number"
-}
-```
-
-#### Get Due Details
-
-```http
-GET /api/reports/due-details
-```
-
-_Requires Authentication Token_
-
-**Response:**
-
-```json
-{
-  "members": [
-    {
-      "_id": "string",
-      "name": "string",
-      "number": "string",
-      "member_total_due_amount": "number",
-      "membership_type": "string",
-      "last_payment_date": "date",
-      "last_due_payment_date": "date",
-      "payment_history": [
-        {
-          "amount": "number",
-          "date": "date",
-          "mode": "string"
-        }
-      ]
-    }
-  ],
-  "statistics": {
-    "totalMembers": "number",
-    "averageDueAmount": "number",
-    "highestDueAmount": "number",
-    "lowestDueAmount": "number"
-  },
-  "summary": {
-    "totalPaymentsProcessed": "number",
-    "recentPayments": []
-  }
-}
-```
-
-### Utility Routes (`/api/utils`)
-
-#### Get All Gyms
-
-```http
-GET /api/utils/gyms
-```
-
-_Requires Authentication Token_
-
-**Response:**
-
-```json
-[
-  {
-    "_id": "string",
-    "name": "string",
-    "address": "string"
-  }
-]
-```
-
-### Data Models
-
-[Previous models remain the same...]
-
-### Settings
-
-```javascript
-{
-  gymId: ObjectId,
-  gymName: String,
-  gymAddress: String,
-  contactEmail: String,
-  contactPhone: String,
-  backupFrequency: String (enum: ['daily', 'weekly', 'monthly']),
-  retentionPeriod: Number,
-  notificationsEnabled: Boolean,
-  maintenanceMode: Boolean,
-  timestamps: true
-}
-```
-
-### Counter
-
-```javascript
-{
-  name: String,
-  seq: Number
-}
-```
-
-### Additional Features
-
-#### Automated Backup System
-
-- Configurable backup frequency (daily/weekly/monthly)
-- Retention period management
-- Automated cleanup of old backups
-- Manual backup/restore capabilities
-
-#### Image Processing
-
-- Automatic image resizing and optimization
-- Support for multiple image formats
-- Size limits and validation
-
-#### Data Validation
-
-- Pre-save hooks for data validation
-- Custom validators for membership types
-- Automatic ID generation for members and renewals
-
-#### Security Enhancements
-
-- Role-based access control
-- Granular permissions system
-- Gym-specific data isolation
-- Input sanitization and validation
-
-#### Logging System
-
-- Detailed error logging
-- Activity tracking
-- Debug information logging
-- Log rotation and management
-
----
-
-### Member Routes (`/api/member`)
-
-#### Create Member
+#### Create New Member
 
 ```http
 POST /api/member/signup
 ```
 
-_Requires Authentication Token_
-**Body:**
+**Body:** (multipart/form-data)
+
+```
+name: string
+number: string
+gender: string
+age: number
+email: string (optional)
+membership_type: string
+membership_amount: number
+membership_due_amount: number (optional)
+membership_payment_status: string
+membership_payment_mode: string
+membership_payment_date: date
+photo: file (optional)
+```
+
+**Response:**
 
 ```json
 {
-  "name": "string",
-  "number": "string",
-  "gender": "string",
-  "age": "number",
-  "email": "string",
-  "membership_type": "string",
-  "membership_amount": "number",
-  "membership_due_amount": "number",
-  "membership_payment_status": "string",
-  "membership_payment_mode": "string",
-  "membership_payment_date": "date",
-  "photo": "file (image)" // Optional:  File upload using multipart/form-data
+  "message": "User created successfully"
 }
 ```
 
@@ -380,7 +215,36 @@ _Requires Authentication Token_
 GET /api/member/members
 ```
 
-_Requires Authentication Token_
+**Query Parameters:**
+```
+page: number (default: 1)
+limit: number (default: 10)
+status: string (all, Active, Inactive, or Expired)
+```
+
+**Response:**
+
+```json
+{
+  "members": [
+    {
+      "_id": "string",
+      "name": "string",
+      "gender": "string",
+      "age": "number",
+      "email": "string",
+      "number": "string",
+      "membership_type": "string",
+      "membership_status": "string",
+      "membership_start_date": "date",
+      "membership_end_date": "date"
+    }
+  ],
+  "total": "number",
+  "page": "number",
+  "totalPages": "number"
+}
+```
 
 #### Get Member by Number
 
@@ -388,54 +252,109 @@ _Requires Authentication Token_
 GET /api/member/members/:number
 ```
 
-_Requires Authentication Token_
-
-#### Update Member by Number
-
-```http
-PUT /api/member/members/:number
-```
-
-_Requires Authentication Token_
-**Body:**
+**Response:**
 
 ```json
 {
-  "name": "string", // Optional
-  "gender": "string", // Optional
-  "age": "number", // Optional
-  "email": "string", // Optional
-  "membership_type": "string", // Optional
-  "membership_amount": "number", // Optional
-  "membership_due_amount": "number", // Optional
-  "membership_payment_status": "string", // Optional
-  "membership_payment_mode": "string", // Optional
-  "membership_payment_date": "date", // Optional
-  "photo": "file (image)" // Optional: File upload (multipart/form-data)
+  "_id": "string",
+  "id": "string",
+  "name": "string",
+  "gender": "string",
+  "age": "number",
+  "email": "string",
+  "number": "string",
+  "member_total_payment": "number",
+  "member_total_due_amount": "number",
+  "membership_type": "string",
+  "membership_status": "string",
+  "membership_start_date": "date",
+  "membership_end_date": "date",
+  "membership_duration": "number",
+  "membership_amount": "number",
+  "membership_due_amount": "number",
+  "membership_payment_status": "string",
+  "membership_payment_date": "date",
+  "membership_payment_mode": "string"
 }
 ```
 
-#### Delete Member by Number
+#### Delete Member
 
 ```http
 DELETE /api/member/members/:number
 ```
 
-_Requires Authentication Token_
+**Response:**
 
-#### Add Membership Days (Transfer Days)
+```json
+{
+  "message": "User deleted successfully"
+}
+```
+
+#### Update Member
+
+```http
+PUT /api/member/members/:number
+```
+
+**Body:** (multipart/form-data)
+
+```
+name: string (optional)
+gender: string (optional)
+age: number (optional)
+email: string (optional)
+membership_type: string (optional)
+membership_amount: number (optional)
+membership_due_amount: number (optional)
+membership_payment_status: string (optional)
+membership_payment_mode: string (optional)
+membership_start_date: date (optional)
+photo: file (optional)
+```
+
+**Response:**
+
+```json
+{
+  "message": "Member updated successfully",
+  "member": {
+    "_id": "string",
+    "id": "string",
+    "name": "string",
+    "gender": "string",
+    "age": "number",
+    "email": "string",
+    "number": "string",
+    "membership_type": "string",
+    "membership_status": "string",
+    "membership_start_date": "date",
+    "membership_end_date": "date"
+  }
+}
+```
+
+#### Transfer Membership Days
 
 ```http
 POST /api/member/transfer
 ```
 
-_Requires Authentication Token_
 **Body:**
 
 ```json
 {
-  "source_number": "string", // Phone number of the member donating days
-  "target_number": "string" // Phone number of the member receiving days
+  "source_number": "string",
+  "target_number": "string"
+}
+```
+
+**Response:**
+
+```json
+{
+  "message": "Membership days transferred successfully"
 }
 ```
 
@@ -445,144 +364,79 @@ _Requires Authentication Token_
 POST /api/member/complimentary-days
 ```
 
-_Requires Authentication Token_
 **Body:**
 
 ```json
 {
-  "number": "string", // Phone number of the member
-  "days": "number" // Number of complimentary days to add
+  "number": "string",
+  "days": "number"
 }
 ```
 
-#### Get Membership Form Data (Placeholder)
+**Response:**
+
+```json
+{
+  "message": "5 complimentary days added successfully",
+  "newExpiryDate": "date"
+}
+```
+
+#### Get Membership Form
 
 ```http
 GET /api/member/membership-form/:number
 ```
 
-_Requires Authentication Token_
+**Response:**
 
-### Trainer Routes (`/api`)
-
-#### Create Trainer
-
-```http
-POST /api/trainer
+```json
+{
+  "message": "Membership form data",
+  "member": {
+    "_id": "string",
+    "name": "string",
+    "number": "string"
+    // Other member details
+  }
+}
 ```
 
-_Requires Authentication Token_
+#### Search Members
+
+```http
+POST /api/member/search
+```
+
 **Body:**
 
 ```json
 {
-  "name": "string",
-  "email": "string",
-  "number": "string",
-  "specialization": "string",
-  "experience": "number",
-  "certifications": "array",
-  "schedule": "object",
-  "photo": "file (image)" // Optional: File upload (multipart/form-data)
+  "query": "string"
 }
 ```
 
-#### Get All Trainers
-
-```http
-GET /api/trainers
-```
-
-_Requires Authentication Token_
-
-#### Get Trainer by ID
-
-```http
-GET /api/trainer/:id
-```
-
-_Requires Authentication Token_
-
-#### Update Trainer by ID
-
-```http
-PUT /api/trainer/:id
-```
-
-_Requires Authentication Token_
-**Body:**
+**Response:**
 
 ```json
 {
-  "name": "string", // Optional
-  "email": "string", // Optional
-  "number": "string", // Optional
-  "specialization": "string", // Optional
-  "experience": "number", // Optional
-  "certifications": "array", // Optional
-  "schedule": "object", // Optional
-  "photo": "file (image)" // Optional:  File upload (multipart/form-data)
+  "count": "number",
+  "members": [
+    {
+      "_id": "string",
+      "name": "string",
+      "email": "string",
+      "number": "string",
+      "membership_type": "string",
+      "membership_status": "string",
+      "membership_end_date": "date",
+      "id": "string"
+    }
+  ]
 }
 ```
 
-#### Delete Trainer by ID
-
-```http
-DELETE /api/trainer/:id
-```
-
-_Requires Authentication Token_
-
-### Attendance Routes (`/api`)
-
-#### Check-in Member
-
-```http
-POST /api/attendance/checkin
-```
-
-_Requires Authentication Token_
-**Body:**
-
-```json
-{
-  "number": "string"
-}
-```
-
-#### Check-out Member
-
-```http
-POST /api/attendance/checkout
-```
-
-_Requires Authentication Token_
-**Body:**
-
-```json
-{
-  "number": "string"
-}
-```
-
-#### Get Attendance Records for a Specific Member
-
-```http
-GET /api/attendance/:number
-```
-
-_Requires Authentication Token_
-_Returns an array of attendance records_
-
-#### Get All Attendance Records (for the gym)
-
-```http
-GET /api/attendance
-```
-
-_Requires Authentication Token_
-
-### Membership Routes (`/api/memberships`)
+### Membership Management
 
 #### Renew Membership
 
@@ -590,7 +444,6 @@ _Requires Authentication Token_
 POST /api/memberships/renew
 ```
 
-_Requires Authentication Token_
 **Body:**
 
 ```json
@@ -604,45 +457,118 @@ _Requires Authentication Token_
 }
 ```
 
-#### Get All Renew Records
+**Response:**
+
+```json
+{
+  "message": "Membership renewed successfully",
+  "member": {
+    "_id": "string",
+    "name": "string",
+    "number": "string",
+    "membership_type": "string",
+    "membership_end_date": "date"
+  }
+}
+```
+
+#### Get All Renewal Records
 
 ```http
 GET /api/memberships/renew
 ```
 
-_Requires Authentication Token_
+**Response:**
 
-#### Get Renew Records for a specific user
+```json
+[
+  {
+    "_id": "string",
+    "id": "string",
+    "name": "string",
+    "number": "string",
+    "membership_type": "string",
+    "membership_amount": "number",
+    "membership_due_amount": "number",
+    "membership_payment_status": "string",
+    "membership_payment_date": "date",
+    "membership_payment_mode": "string",
+    "membership_end_date": "date"
+  }
+]
+```
+
+#### Get Member Renewal Records
 
 ```http
 GET /api/memberships/renew/:number
 ```
 
-_Requires Authentication Token_
+**Response:**
 
-#### Delete Renew Record
+```json
+[
+  {
+    "_id": "string",
+    "id": "string",
+    "name": "string",
+    "number": "string",
+    "membership_type": "string",
+    "membership_amount": "number",
+    "membership_due_amount": "number",
+    "membership_payment_status": "string",
+    "membership_payment_date": "date",
+    "membership_payment_mode": "string",
+    "membership_end_date": "date"
+  }
+]
+```
+
+#### Delete Renewal Record
 
 ```http
 DELETE /api/memberships/renew/:id
 ```
 
-_Requires Authentication Token_
+**Response:**
 
-#### Update Renew Record
+```json
+{
+  "message": "Renew record deleted successfully"
+}
+```
+
+#### Update Renewal Record
 
 ```http
 PUT /api/memberships/renew/:id
 ```
 
-_Requires Authentication Token_
 **Body:**
 
 ```json
 {
-  "membership_type": "string", // Optional
-  "membership_amount": "number", // Optional
-  "membership_payment_status": "string", // Optional
-  "membership_payment_mode": "string" // Optional
+  "membership_type": "string",
+  "membership_amount": "number",
+  "membership_payment_status": "string",
+  "membership_payment_mode": "string"
+}
+```
+
+**Response:**
+
+```json
+{
+  "message": "Renew record updated successfully",
+  "record": {
+    "_id": "string",
+    "name": "string",
+    "number": "string",
+    "membership_type": "string",
+    "membership_amount": "number",
+    "membership_payment_status": "string",
+    "membership_payment_mode": "string"
+  }
 }
 ```
 
@@ -652,7 +578,23 @@ _Requires Authentication Token_
 GET /api/memberships/plans
 ```
 
-_Requires Authentication Token_
+**Response:**
+
+```json
+[
+  {
+    "_id": "string",
+    "name": "string",
+    "duration": "number",
+    "price": "number",
+    "description": "string",
+    "features": ["string"],
+    "gymId": "string",
+    "createdAt": "date",
+    "updatedAt": "date"
+  }
+]
+```
 
 #### Create Membership Plan
 
@@ -660,16 +602,31 @@ _Requires Authentication Token_
 POST /api/memberships/plans
 ```
 
-_Requires Authentication Token_
 **Body:**
 
 ```json
 {
   "name": "string",
-  "duration": "number", // in months
+  "duration": "number",
   "price": "number",
   "description": "string",
-  "features": "array" // Optional
+  "features": ["string"]
+}
+```
+
+**Response:**
+
+```json
+{
+  "_id": "string",
+  "name": "string",
+  "duration": "number",
+  "price": "number",
+  "description": "string",
+  "features": ["string"],
+  "gymId": "string",
+  "createdAt": "date",
+  "updatedAt": "date"
 }
 ```
 
@@ -679,16 +636,31 @@ _Requires Authentication Token_
 PUT /api/memberships/plans/:id
 ```
 
-_Requires Authentication Token_
 **Body:**
 
 ```json
 {
   "name": "string",
-  "duration": "number", // in months
+  "duration": "number",
   "price": "number",
   "description": "string",
-  "features": "array" // Optional
+  "features": ["string"]
+}
+```
+
+**Response:**
+
+```json
+{
+  "_id": "string",
+  "name": "string",
+  "duration": "number",
+  "price": "number",
+  "description": "string",
+  "features": ["string"],
+  "gymId": "string",
+  "createdAt": "date",
+  "updatedAt": "date"
 }
 ```
 
@@ -698,15 +670,20 @@ _Requires Authentication Token_
 DELETE /api/memberships/plans/:id
 ```
 
-_Requires Authentication Token_
+**Response:**
 
-#### Pay Due Amount
+```json
+{
+  "message": "Membership plan deleted successfully"
+}
+```
+
+#### Process Due Payment
 
 ```http
 POST /api/memberships/pay-due
 ```
 
-_Requires Authentication Token_
 **Body:**
 
 ```json
@@ -717,118 +694,229 @@ _Requires Authentication Token_
 }
 ```
 
-### User Routes (`/api`)
+**Response:**
 
-#### List All Users
-
-```http
-GET /api/users
+```json
+{
+  "message": "Due payment processed successfully",
+  "remaining_due": "number",
+  "payment_details": {
+    "amount_paid": "number",
+    "payment_date": "date",
+    "payment_mode": "string"
+  }
+}
 ```
 
-_Requires Authentication Token_
+### Attendance Management
 
-#### Create User
+#### Check-in Member
 
 ```http
-POST /api/users
+POST /api/attendance/checkin
 ```
 
-_Requires Authentication Token_
 **Body:**
 
 ```json
 {
-  "name": "string",
-  "gender": "string",
-  "age": "number",
-  "email": "string",
-  "number": "string",
-  "password": "string",
-  "user_type": "string",
-  "permissions": "array of strings (optional)", // Defaults to role's permissions if not provided.
-  "gymId": "string"
+  "number": "string"
 }
 ```
 
-#### Edit User by ID
+**Response:**
 
-```http
-PUT /api/users/:id
+```json
+{
+  "message": "Check-in recorded",
+  "attendance": {
+    "_id": "string",
+    "name": "string",
+    "number": "string",
+    "checkIn": "date",
+    "gymId": "string"
+  }
+}
 ```
 
-_Requires Authentication Token_
+#### Check-out Member
+
+```http
+POST /api/attendance/checkout
+```
+
 **Body:**
 
 ```json
 {
-  "name": "string", // Optional
-  "gender": "string", // Optional
-  "age": "number", // Optional
-  "email": "string", // Optional
-  "number": "string", // Optional
-  "user_type": "string", // Optional
-  "permissions": "array of strings (optional)" // Optional
+  "number": "string"
 }
 ```
 
-#### Delete User by ID
-
-```http
-DELETE /api/users/:id
-```
-
-_Requires Authentication Token_
-
-#### Get Available Roles
-
-```http
-GET /api/roles
-```
-
-_Requires Authentication Token_
-
-#### Create Role
-
-```http
-POST /api/roles
-```
-
-_Requires Authentication Token_
-**Body:**
+**Response:**
 
 ```json
 {
-  "roleName": "string",
-  "defaultPermissions": "array of strings" // Optional
-  "currentPermissions": "array of strings" // Optional
+  "message": "Check-out recorded",
+  "attendance": {
+    "_id": "string",
+    "name": "string",
+    "number": "string",
+    "checkIn": "date",
+    "checkOut": "date",
+    "gymId": "string"
+  }
 }
 ```
 
-#### Update Role
+#### Get All Attendance Records
 
 ```http
-PUT /api/roles/:roleName
+GET /api/attendance
 ```
 
-_Requires Authentication Token_
-**Body:**
+**Response:**
 
 ```json
 {
-  "defaultPermissions": "array of strings", // Optional
-  "currentPermissions": "array of strings" // Optional
+  "gymId": "string",
+  "attendances": [
+    {
+      "_id": "string",
+      "id": "string",
+      "name": "string",
+      "number": "string",
+      "checkIn": "date",
+      "checkOut": "date",
+      "gymId": "string"
+    }
+  ]
 }
 ```
 
-#### Delete Role
+#### Get Member Attendance Records
 
 ```http
-DELETE /api/roles/:id
+GET /api/attendance/:number
 ```
 
-_Requires Authentication Token_
+**Response:**
 
-### Analytics Routes (`/api/reports/analytics`)
+```json
+[
+  {
+    "_id": "string",
+    "id": "string",
+    "name": "string",
+    "number": "string",
+    "checkIn": "date",
+    "checkOut": "date",
+    "gymId": "string"
+  }
+]
+```
+
+### Reports and Analytics
+
+#### Get Membership Reports
+
+```http
+GET /api/reports/membership
+```
+
+**Response:**
+
+```json
+{
+  "totalActiveMembers": "number",
+  "newMemberSignups": [
+    {
+      "_id": "date-string",
+      "count": "number"
+    }
+  ],
+  "expiringMemberships": [
+    {
+      "_id": "string",
+      "name": "string",
+      "membership_end_date": "date"
+    }
+  ],
+  "membershipRenewalRate": "number",
+  "dailyRenewals": [
+    {
+      "_id": "date-string",
+      "count": "number"
+    }
+  ],
+  "monthlyRenewals": [
+    {
+      "_id": {
+        "year": "number",
+        "month": "number"
+      },
+      "count": "number"
+    }
+  ],
+  "renewalRevenue": "number",
+  "paymentSummary": {
+    "totalPayments": "number",
+    "totalRevenue": "number"
+  },
+  "paymentMethodsBreakdown": [
+    {
+      "_id": "string",
+      "count": "number",
+      "total": "number"
+    }
+  ]
+}
+```
+
+#### Get Financial Reports
+
+```http
+GET /api/reports/financial
+```
+
+**Response:**
+
+```json
+{
+  "totalRevenue": "number",
+  "totalDue": "number",
+  "paymentSummary": {
+    "totalPayments": "number",
+    "totalRevenue": "number",
+    "totalDue": "number",
+    "totalRefunds": "number",
+    "totalPendingPayments": "number",
+    "totalFailedPayments": "number"
+  },
+  "dailyPayments": [
+    {
+      "_id": "date-string",
+      "count": "number"
+    }
+  ],
+  "monthlyPayments": [
+    {
+      "_id": {
+        "year": "number",
+        "month": "number"
+      },
+      "count": "number"
+    }
+  ],
+  "paymentMethodsBreakdown": [
+    {
+      "_id": "string",
+      "count": "number",
+      "total": "number"
+    }
+  ]
+}
+```
 
 #### Get Membership Analytics
 
@@ -836,7 +924,11 @@ _Requires Authentication Token_
 GET /api/reports/analytics/membership
 ```
 
-_Requires Authentication Token_
+**Query Parameters:**
+```
+date: string (ISO date, default: today)
+interval: string (15, 30, 90, all - default: 30)
+```
 
 **Response:**
 
@@ -875,6 +967,10 @@ _Requires Authentication Token_
     ]
   },
   "growth": {
+    "currentMonthGrowth": {
+      "newMembers": "number",
+      "totalRevenue": "number"
+    },
     "monthlyGrowth": [
       {
         "_id": {
@@ -882,8 +978,7 @@ _Requires Authentication Token_
           "month": "number"
         },
         "newMembers": "number",
-        "totalRevenue": "number",
-        "growthRate": "number"
+        "totalRevenue": "number"
       }
     ],
     "totalGrowth": "number"
@@ -929,7 +1024,11 @@ _Requires Authentication Token_
 GET /api/reports/analytics/attendance
 ```
 
-_Requires Authentication Token_
+**Query Parameters:**
+```
+date: string (ISO date, default: today)
+interval: string (15, 30, 90, all - default: 30)
+```
 
 **Response:**
 
@@ -948,7 +1047,9 @@ _Requires Authentication Token_
     "averageVisitDuration": "number",
     "busiestDays": [
       {
-        "_id": "number",
+        "_id": {
+          "dayOfWeek": "number"
+        },
         "count": "number"
       }
     ],
@@ -981,7 +1082,11 @@ _Requires Authentication Token_
       },
       "count": "number"
     }
-  ]
+  ],
+  "dateRange": {
+    "startDate": "date",
+    "endDate": "date"
+  }
 }
 ```
 
@@ -991,7 +1096,11 @@ _Requires Authentication Token_
 GET /api/reports/analytics/financial
 ```
 
-_Requires Authentication Token_
+**Query Parameters:**
+```
+date: string (ISO date, default: today)
+interval: string (15, 30, 90, all - default: 30)
+```
 
 **Response:**
 
@@ -1004,19 +1113,28 @@ _Requires Authentication Token_
           "year": "number",
           "month": "number"
         },
-        "revenue": "number"
+        "revenue": "number",
+        "renewalCount": "number"
       }
     ],
-    "projectedRevenue": [
+    "metrics": {
+      "renewalRate": "number",
+      "growthRate": "number",
+      "averageMembershipAmount": "number",
+      "averageRenewalAmount": "number"
+    },
+    "projections": [
       {
         "_id": {
           "year": "number",
           "month": "number"
         },
-        "revenue": "number"
+        "projectedRevenue": "number",
+        "expectedRenewals": "number",
+        "baseRevenue": "number",
+        "growthRevenue": "number"
       }
     ],
-    "growthRate": "number",
     "upcomingRenewals": [
       {
         "amount": "number",
@@ -1041,7 +1159,11 @@ _Requires Authentication Token_
         "total": "number",
         "count": "number"
       }
-    ]
+    ],
+    "dateRange": {
+      "startDate": "date",
+      "endDate": "date"
+    }
   },
   "duePaymentsTrend": [
     {
@@ -1058,174 +1180,880 @@ _Requires Authentication Token_
     "totalDues": "number",
     "totalExpenses": "number",
     "netIncome": "number",
-    "profitMargin": "number"
+    "profitMargin": "number",
+    "dateRange": {
+      "startDate": "date",
+      "endDate": "date"
+    }
+  },
+  "dateRange": {
+    "startDate": "date",
+    "endDate": "date"
   }
 }
 ```
 
-#### Query Parameters
+#### Get Upcoming Renewals
 
-All analytics endpoints support the following optional query parameters:
-
-- `startDate`: Date (YYYY-MM-DD) - Start date for the analysis period
-- `endDate`: Date (YYYY-MM-DD) - End date for the analysis period
-- `interval`: String (daily, weekly, monthly) - Grouping interval for trend data
-
-#### Error Responses
-
-- 401: Unauthorized (Invalid or missing token)
-- 403: Forbidden (Insufficient permissions)
-- 404: Not found (Gym not found)
-- 500: Server error
-
-#### Rate Limiting
-
-Analytics endpoints are rate-limited to:
-
-- 100 requests per hour per IP
-- 1000 requests per day per gym
-
-## Middleware
-
-### Authentication Middleware
-
-- `protect`: Verifies JWT token and attaches user to request
-- `attachGym`: Extracts gym ID from JWT token and attaches to request
-
-## Error Handling
-
-The API returns appropriate HTTP status codes:
-
-- 200: Success
-- 201: Created
-- 400: Bad Request
-- 401: Unauthorized
-- 403: Forbidden
-- 404: Not Found
-- 409: Conflict (e.g., user already exists)
-- 500: Server Error
-
-## Environment Variables
-
-Required environment variables:
-
-```
-MongoDB=<mongodb-connection-string>
-JWT_SECRET=<jwt-secret-key>
-ALLOWED_ORIGINS=<comma-separated-list-of-allowed-origins> // Optional: For CORS configuration.
+```http
+GET /api/reports/upcoming-renewals
 ```
 
-## Logging
+**Response:**
 
-The system uses a custom logger that writes to:
+```json
+{
+  "renewals": [
+    {
+      "_id": "string",
+      "name": "string",
+      "number": "string",
+      "membership_type": "string",
+      "membership_end_date": "date",
+      "membership_amount": "number"
+    }
+  ],
+  "totalCount": "number",
+  "totalExpectedRevenue": "number",
+  "queryDetails": {
+    "dateRange": {
+      "from": "date",
+      "to": "date"
+    },
+    "gymId": "string"
+  }
+}
+```
 
-- `logs.log`: General application logs
-- `debug.log`: Debug-level information
+#### Get Due Payment Details
+
+```http
+GET /api/reports/due-details
+```
+
+**Response:**
+
+```json
+{
+  "members": [
+    {
+      "_id": "string",
+      "name": "string",
+      "number": "string",
+      "member_total_due_amount": "number",
+      "membership_type": "string",
+      "last_payment_date": "date",
+      "last_due_payment_date": "date",
+      "payment_history": [
+        {
+          "amount": "number",
+          "date": "date",
+          "mode": "string"
+        }
+      ]
+    }
+  ],
+  "totalDue": "number",
+  "statistics": {
+    "totalMembers": "number",
+    "averageDueAmount": "number",
+    "highestDueAmount": "number",
+    "lowestDueAmount": "number"
+  },
+  "summary": {
+    "totalPaymentsProcessed": "number",
+    "recentPayments": [
+      {
+        "amount": "number",
+        "date": "date",
+        "mode": "string"
+      }
+    ]
+  }
+}
+```
+
+### User and Role Management
+
+#### Get All Users
+
+```http
+GET /api/users
+```
+
+**Response:**
+
+```json
+[
+  {
+    "_id": "string",
+    "name": "string",
+    "gender": "string",
+    "age": "number",
+    "email": "string",
+    "number": "string",
+    "user_type": "string",
+    "permissions": ["string"],
+    "createdAt": "date",
+    "gymId": "string"
+  }
+]
+```
+
+#### Edit User
+
+```http
+PUT /api/users/:id
+```
+
+**Body:**
+
+```json
+{
+  "name": "string",
+  "gender": "string",
+  "age": "number",
+  "email": "string",
+  "number": "string",
+  "user_type": "string",
+  "permissions": ["string"]
+}
+```
+
+**Response:**
+
+```json
+{
+  "_id": "string",
+  "name": "string",
+  "gender": "string",
+  "age": "number",
+  "email": "string",
+  "number": "string",
+  "user_type": "string",
+  "permissions": ["string"],
+  "createdAt": "date",
+  "gymId": "string"
+}
+```
+
+#### Delete User
+
+```http
+DELETE /api/users/:id
+```
+
+**Response:**
+
+```json
+{
+  "message": "User deleted successfully"
+}
+```
+
+#### Get All Roles
+
+```http
+GET /api/roles
+```
+
+**Response:**
+
+```json
+[
+  {
+    "_id": "string",
+    "roleName": "string",
+    "defaultPermissions": ["string"],
+    "currentPermissions": ["string"],
+    "createdAt": "date",
+    "updatedAt": "date"
+  }
+]
+```
+
+#### Create User
+
+```http
+POST /api/users
+```
+
+**Body:**
+
+```json
+{
+  "email": "string",
+  "name": "string",
+  "user_type": "string",
+  "number": "string",
+  "password": "string",
+  "gender": "string",
+  "age": "number",
+  "permissions": ["string"],
+  "gymId": "string"
+}
+```
+
+**Response:**
+
+```json
+{
+  "_id": "string",
+  "email": "string",
+  "name": "string",
+  "user_type": "string",
+  "number": "string",
+  "gender": "string",
+  "age": "number",
+  "permissions": ["string"],
+  "gymId": "string"
+}
+```
+
+#### Get User by ID
+
+```http
+GET /api/users/:id
+```
+
+**Response:**
+
+```json
+{
+  "_id": "string",
+  "name": "string",
+  "gender": "string",
+  "age": "number",
+  "email": "string",
+  "number": "string",
+  "user_type": "string",
+  "permissions": ["string"],
+  "createdAt": "date",
+  "gymId": "string"
+}
+```
+
+### Role Management
+
+#### Create Role
+
+```http
+POST /api/roles
+```
+
+**Body:**
+
+```json
+{
+  "roleName": "string",
+  "defaultPermissions": ["string"],
+  "currentPermissions": ["string"]
+}
+```
+
+**Response:**
+
+```json
+{
+  "_id": "string",
+  "roleName": "string",
+  "defaultPermissions": ["string"],
+  "currentPermissions": ["string"],
+  "createdAt": "date",
+  "updatedAt": "date"
+}
+```
+
+#### Get All Roles
+
+```http
+GET /api/roles
+```
+
+**Response:**
+
+```json
+[
+  {
+    "_id": "string",
+    "roleName": "string",
+    "defaultPermissions": ["string"],
+    "currentPermissions": ["string"],
+    "createdAt": "date",
+    "updatedAt": "date"
+  }
+]
+```
+
+#### Update Role Permissions
+
+```http
+PUT /api/roles/:roleName
+```
+
+**Body:**
+
+```json
+{
+  "defaultPermissions": ["string"],
+  "currentPermissions": ["string"]
+}
+```
+
+**Response:**
+
+```json
+{
+  "_id": "string",
+  "roleName": "string",
+  "defaultPermissions": ["string"],
+  "currentPermissions": ["string"],
+  "createdAt": "date",
+  "updatedAt": "date"
+}
+```
+
+#### Delete Role
+
+```http
+DELETE /api/roles/:id
+```
+
+**Response:**
+
+```json
+{
+  "message": "Role removed successfully",
+  "deletedRole": {
+    "name": "string",
+    "id": "string"
+  }
+}
+```
+
+#### Get Role by Name
+
+```http
+GET /api/roles/:roleName
+```
+
+**Response:**
+
+```json
+{
+  "_id": "string",
+  "roleName": "string",
+  "defaultPermissions": ["string"],
+  "currentPermissions": ["string"],
+  "createdAt": "date",
+  "updatedAt": "date"
+}
+```
+
+### Trainer Management
+
+#### Create Trainer
+
+```http
+POST /api/trainer
+```
+
+**Body:** (multipart/form-data)
+
+```
+name: string
+email: string
+number: string
+specialization: string
+experience: number
+certifications: string (comma-separated)
+schedule: string (JSON array)
+photo: file (optional)
+```
+
+**Response:**
+
+```json
+{
+  "_id": "string",
+  "name": "string",
+  "email": "string",
+  "number": "string",
+  "specialization": "string",
+  "experience": "number",
+  "certifications": ["string"],
+  "schedule": [
+    {
+      "day": "string",
+      "startTime": "string",
+      "endTime": "string"
+    }
+  ],
+  "gymId": "string"
+}
+```
+
+#### Get All Trainers
+
+```http
+GET /api/trainers
+```
+
+**Response:**
+
+```json
+[
+  {
+    "_id": "string",
+    "name": "string",
+    "email": "string",
+    "number": "string",
+    "specialization": "string",
+    "experience": "number",
+    "certifications": ["string"],
+    "schedule": [
+      {
+        "day": "string",
+        "startTime": "string",
+        "endTime": "string"
+      }
+    ],
+    "createdAt": "date",
+    "gymId": "string"
+  }
+]
+```
+
+#### Get Trainer by ID
+
+```http
+GET /api/trainer/:id
+```
+
+**Response:**
+
+```json
+{
+  "_id": "string",
+  "name": "string",
+  "email": "string",
+  "number": "string",
+  "specialization": "string",
+  "experience": "number",
+  "certifications": ["string"],
+  "schedule": [
+    {
+      "day": "string",
+      "startTime": "string",
+      "endTime": "string"
+    }
+  ],
+  "createdAt": "date",
+  "gymId": "string"
+}
+```
+
+#### Update Trainer
+
+```http
+PUT /api/trainer/:id
+```
+
+**Body:** (multipart/form-data)
+
+```
+name: string (optional)
+email: string (optional)
+number: string (optional)
+specialization: string (optional)
+experience: number (optional)
+certifications: string (comma-separated, optional)
+schedule: string (JSON array, optional)
+photo: file (optional)
+```
+
+**Response:**
+
+```json
+{
+  "_id": "string",
+  "name": "string",
+  "email": "string",
+  "number": "string",
+  "specialization": "string",
+  "experience": "number",
+  "certifications": ["string"],
+  "schedule": [
+    {
+      "day": "string",
+      "startTime": "string",
+      "endTime": "string"
+    }
+  ],
+  "createdAt": "date",
+  "gymId": "string"
+}
+```
+
+#### Delete Trainer
+
+```http
+DELETE /api/trainer/:id
+```
+
+**Response:**
+
+```json
+{
+  "message": "Trainer removed"
+}
+```
+
+### Settings Management
+
+#### Get Settings
+
+```http
+GET /api/settings
+```
+
+**Response:**
+
+```json
+{
+  "_id": "string",
+  "gymId": "string",
+  "gymName": "string",
+  "gymAddress": "string",
+  "contactEmail": "string",
+  "contactPhone": "string",
+  "createdAt": "date",
+  "updatedAt": "date"
+}
+```
+
+#### Update Settings
+
+```http
+PUT /api/settings
+```
+
+**Body:**
+
+```json
+{
+  "gymName": "string",
+  "gymAddress": "string",
+  "contactEmail": "string",
+  "contactPhone": "string"
+}
+```
+
+**Response:**
+
+```json
+{
+  "_id": "string",
+  "gymId": "string",
+  "gymName": "string",
+  "gymAddress": "string",
+  "contactEmail": "string",
+  "contactPhone": "string",
+  "createdAt": "date",
+  "updatedAt": "date"
+}
+```
+
+#### Create Backup
+
+```http
+POST /api/settings/backup
+```
+
+**Response:**
+
+```json
+{
+  "message": "Backup completed successfully"
+}
+```
+
+#### List Backups
+
+```http
+GET /api/settings/backups
+```
+
+**Response:**
+
+```json
+[
+  {
+    "filename": "string",
+    "size": "number",
+    "createdAt": "date"
+  }
+]
+```
+
+#### Restore from Backup
+
+```http
+POST /api/settings/restore/:filename
+```
+
+**Response:**
+
+```json
+{
+  "message": "Restore completed successfully"
+}
+```
+
+#### Upload Backup
+
+```http
+POST /api/settings/upload-backup
+```
+
+**Body:** (multipart/form-data)
+
+```
+backup: file
+```
+
+**Response:**
+
+```json
+{
+  "message": "Backup file uploaded successfully",
+  "filename": "string"
+}
+```
+
+#### Get System Information
+
+```http
+GET /api/settings/system-info
+```
+
+**Response:**
+
+```json
+{
+  "success": true,
+  "data": {
+    "lastBackup": "string",
+    "system": {
+      "version": "string",
+      "uptime": "string",
+      "lastMaintenance": "string",
+      "connections": {
+        "current": "number",
+        "available": "number"
+      }
+    },
+    "database": {
+      "name": "string",
+      "size": "string",
+      "collections": "number",
+      "documents": "number",
+      "indexes": "number"
+    },
+    "os": {
+      "type": "string",
+      "platform": "string",
+      "arch": "string",
+      "release": "string",
+      "uptime": "string",
+      "memory": {
+        "total": "string",
+        "free": "string"
+      },
+      "cpus": "number"
+    },
+    "storageInfo": {
+      "backupDirectory": "string",
+      "totalBackups": "number",
+      "oldestBackup": "string",
+      "newestBackup": "string",
+      "totalSize": "string"
+    }
+  }
+}
+```
+
+#### Get Next Backup Time
+
+```http
+GET /api/settings/next-backup
+```
+
+**Response:**
+
+```json
+{
+  "nextBackup": "date",
+  "timezone": "string",
+  "message": "string"
+}
+```
+
+#### Get Gym Settings
+
+```http
+GET /api/settings/gym
+```
+
+**Response:**
+
+```json
+{
+  "success": true,
+  "data": {
+    "_id": "string",
+    "gymId": "string",
+    "gymName": "string",
+    "gymAddress": "string",
+    "contactEmail": "string",
+    "contactPhone": "string",
+    "createdAt": "date",
+    "updatedAt": "date"
+  }
+}
+```
+
+#### Update Gym Settings
+
+```http
+PUT /api/settings/gym
+```
+
+**Body:**
+
+```json
+{
+  "gymName": "string",
+  "gymAddress": "string",
+  "contactEmail": "string",
+  "contactPhone": "string"
+}
+```
+
+**Response:**
+
+```json
+{
+  "success": true,
+  "message": "Settings updated successfully",
+  "data": {
+    "_id": "string",
+    "gymId": "string",
+    "gymName": "string",
+    "gymAddress": "string",
+    "contactEmail": "string",
+    "contactPhone": "string",
+    "createdAt": "date",
+    "updatedAt": "date"
+  }
+}
+```
+
+#### Delete Gym Settings
+
+```http
+DELETE /api/settings/gym
+```
+
+**Response:**
+
+```json
+{
+  "success": true,
+  "message": "Settings deleted successfully"
+}
+```
+
+### Utility Routes
+
+#### Get All Gyms
+
+```http
+GET /api/utils/gyms
+```
+
+**Response:**
+
+```json
+[
+  {
+    "_id": "string",
+    "name": "string",
+    "address": "string"
+  }
+]
+```
+
+#### Get Specific Gym
+
+```http
+GET /api/utils/gym
+```
+
+**Response:**
+
+```json
+{
+  "_id": "string",
+  "name": "string",
+  "address": "string"
+}
+```
+
+#### Update Gym Details
+
+```http
+PUT /api/utils/gym
+```
+
+**Body:**
+
+```json
+{
+  "name": "string",
+  "address": "string"
+}
+```
+
+**Response:**
+
+```json
+{
+  "_id": "string",
+  "name": "string",
+  "address": "string"
+}
+```
 
 ## Security Features
 
-- JWT-based authentication
-- Password hashing (bcrypt)
-- CORS protection (with origin whitelisting)
-- Request validation
-- Data sanitization
-- Gym-specific data isolation
-- Input validation (e.g., required fields, data types, min/max values)
+The Kaizen Gym Management System implements several security measures:
 
-## Data Models
+1. **JWT Authentication**: Secure token-based authentication
+2. **HTTP-only Cookies**: Prevention of XSS attacks
+3. **CSRF Protection**: Cross-Site Request Forgery prevention
+4. **Input Validation**: Comprehensive validation of user inputs
+5. **Error Handling**: Centralized error handling with appropriate responses
+6. **Password Hashing**: Secure storage of user passwords using bcrypt
+7. **Role-Based Access Control**: Restricting access based on user roles
+8. **Logging**: Comprehensive logging for security auditing
 
-### User
+## Deployment Requirements
 
-- name: String
-- gender: String
-- age: Number
-- email: String
-- number: String
-- password: String
-- user_type: String (Admin, User, Trainer, Receptionist, Manager)
-- permissions: [String]
-- gymId: ObjectId
-- createdAt: Date
-
-### Member
-
-- id: String (generated)
-- name: String
-- number: String
-- gender: String
-- age: Number
-- email: String
-- member_total_payment: Number
-- member_total_due_amount: Number
-- createdAt: Date
-- photo: { data: Buffer, contentType: String }
-- membership_type: String
-- membership_status: String
-- membership_start_date: Date
-- membership_end_date: Date
-- membership_duration: Number
-- membership_amount: Number
-- membership_due_amount: Number
-- membership_payment_status: String
-- membership_payment_date: Date
-- membership_payment_mode: String
-- membership_payment_reference: String
-- gymId: ObjectId
-
-### Trainer
-
-- id: String (generated)
-- name: String
-- email: String
-- number: String
-- specialization: String
-- experience: Number
-- certifications: [String]
-- schedule: [ { day: String, startTime: String, endTime: String } ]
-- createdAt: Date
-- photo: { data: Buffer, contentType: String }
-- gymId: ObjectId
-
-### Attendance
-
-- id: String
-- name: String
-- number: String
-- checkIn: Date
-- checkOut: Date
-- attendanceType: String (In-Person, Virtual)
-- gymId: ObjectId
-- timestamps: true
-
-### MembershipPlan
-
-- name: String
-- duration: Number (in months)
-- price: Number
-- description: String
-- features: [String]
-- gymId: ObjectId
-- timestamps: true
-
-### Renew
-
-- id: String
-- name: String
-- number: String
-- membership_type: String
-- membership_amount: Number
-- membership_due_amount: Number
-- membership_payment_status: String
-- membership_payment_date: Date
-- membership_payment_mode: String
-- membership_end_date: Date
-- gymId: ObjectId
-- is_due_payment: Boolean
-- payment_type: String (Membership Renewal, Due Payment)
-
-### Role
-
-- roleName: String
-- defaultPermissions: [String]
-- currentPermissions: [String]
-- timestamps: true
+- Node.js (v14+)
+- MongoDB (v4.4+)
+- MongoDB tools (mongodump for backups)
+- Sufficient storage for database backups
+- Memory: 2GB RAM (minimum)
+- CPU: 1vCPU (minimum, 2+ recommended)
+- Disk: 20GB+ (depends on member count and backup retention)

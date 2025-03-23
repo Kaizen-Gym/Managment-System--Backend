@@ -20,8 +20,9 @@ import {
   analyzeDuePayments,
   calculateProfitabilityMetrics,
 } from "../utils/analytics.js";
-import { validateDateParams } from '../utils/dateValidation.js';
+import { validateDateParams } from "../utils/dateValidation.js";
 import Member from "../models/member.js";
+import { handleError } from "../utils/errorHandler.js";
 
 const router = express.Router();
 
@@ -105,10 +106,10 @@ router.get("/membership/members", protect, attachGym, async (req, res) => {
 
     // Merge gymId filter with the rest of the filters
     const members = await member.find({ ...filter, gymId: req.gymId });
+    logger.info(`Fetched ${members.length} members`);
     res.json(members);
   } catch (error) {
-    logger.error(error);
-    res.status(500).json({ message: "Server Error", error: error.message });
+    handleError(error, req, res);
   }
 });
 
@@ -223,7 +224,8 @@ router.get("/membership", protect, attachGym, async (req, res) => {
     };
     const membershipRenewalRate =
       totalActiveMembers > 0 ? (totalRenewals / totalActiveMembers) * 100 : 0;
-
+    
+    logger.info(`fetched payment methods breakdown for gym ${gymId} successfully`)
     res.json({
       totalActiveMembers,
       newMemberSignups,
@@ -236,8 +238,7 @@ router.get("/membership", protect, attachGym, async (req, res) => {
       paymentMethodsBreakdown,
     });
   } catch (error) {
-    logger.error(error);
-    res.status(500).json({ message: "Server error", error: error.message });
+    handleError(error, req, res);
   }
 });
 
@@ -342,7 +343,8 @@ router.get("/financial", protect, attachGym, async (req, res) => {
       totalPendingPayments,
       totalFailedPayments,
     };
-
+    
+    logger.info(`Payment summary fetched for gym ${req.gymId} successfully`);
     res.json({
       totalRevenue,
       totalDue, // Include total due in response
@@ -352,47 +354,61 @@ router.get("/financial", protect, attachGym, async (req, res) => {
       paymentMethodsBreakdown,
     });
   } catch (error) {
-    logger.error(error);
-    res.status(500).json({ message: "Server error", error: error.message });
+    handleError(error, req, res);
   }
 });
 
-router.get("/analytics/membership", protect, attachGym, validateDateParams, async (req, res) => {
-  try {
-    const { date, interval, } = req.query;
-    const endDate = date ? new Date(date) : new Date();
-    const startDate = new Date(endDate);
-    startDate.setDate(startDate.getDate() - parseInt(interval || 30));
+router.get(
+  "/analytics/membership",
+  protect,
+  attachGym,
+  validateDateParams,
+  async (req, res) => {
+    try {
+      const { date, interval } = req.query;
+      const endDate = date ? new Date(date) : new Date();
+      const startDate = new Date(endDate);
+      startDate.setDate(startDate.getDate() - parseInt(interval || 30));
 
-    // Pass these dates to your analytics functions
-    const retentionData = await calculateRetentionRate(req.gymId, startDate, endDate);
-    const churnData = await calculateChurnRate(req.gymId, startDate, endDate);
-    const growthData = await calculateMembershipGrowth(
-      req.gymId,
-      startDate,
-      endDate,
-    );
-    const demographics = await getMemberDemographics(
-      req.gymId,
-      startDate,
-      endDate,
-    );
-    const trends = await getMembershipTrends(req.gymId, startDate, endDate);
+      // Pass these dates to your analytics functions
+      const retentionData = await calculateRetentionRate(
+        req.gymId,
+        startDate,
+        endDate,
+      );
+      const churnData = await calculateChurnRate(req.gymId, startDate, endDate);
+      const growthData = await calculateMembershipGrowth(
+        req.gymId,
+        startDate,
+        endDate,
+      );
+      const demographics = await getMemberDemographics(
+        req.gymId,
+        startDate,
+        endDate,
+      );
+      const trends = await getMembershipTrends(req.gymId, startDate, endDate);
+      
+      logger.info(`Membership analytics fetched for gym ${req.gymId} successfully`);
+      res.json({
+        retention: retentionData,
+        churn: churnData,
+        growth: growthData,
+        demographics,
+        trends,
+      });
+    } catch (error) {
+      handleError(error, req, res);
+    }
+  },
+);
 
-    res.json({
-      retention: retentionData,
-      churn: churnData,
-      growth: growthData,
-      demographics,
-      trends,
-    });
-  } catch (error) {
-    logger.error(error);
-    res.status(500).json({ message: "Server error" });
-  }
-});
-
-router.get("/analytics/attendance", protect, attachGym, validateDateParams, async (req, res) => {
+router.get(
+  "/analytics/attendance",
+  protect,
+  attachGym,
+  validateDateParams,
+  async (req, res) => {
     try {
       const { date, interval } = req.query;
       const endDate = date ? new Date(date) : new Date();
@@ -422,7 +438,11 @@ router.get("/analytics/attendance", protect, attachGym, validateDateParams, asyn
         startDate,
         endDate,
       );
-
+      
+      logger.info(`Attendance analytics fetched for gym ${req.gymId} successfully`);
+      logger.info(`Peak hours analytics fetched for gym ${req.gymId} successfully`);
+      logger.info(`Weekly patterns analytics fetched for gym ${req.gymId} successfully`);
+      logger.info(`Monthly trends analytics fetched for gym ${req.gymId} successfully`);
       res.json({
         peakHours,
         weeklyPatterns,
@@ -434,13 +454,17 @@ router.get("/analytics/attendance", protect, attachGym, validateDateParams, asyn
         },
       });
     } catch (error) {
-      logger.error(error);
-      res.status(500).json({ message: "Server error" });
+      handleError(error, req, res);
     }
   },
 );
 
-router.get("/analytics/financial", protect, attachGym, validateDateParams, async (req, res) => {
+router.get(
+  "/analytics/financial",
+  protect,
+  attachGym,
+  validateDateParams,
+  async (req, res) => {
     try {
       const { date, interval } = req.query;
       const endDate = date ? new Date(date) : new Date();
@@ -474,7 +498,11 @@ router.get("/analytics/financial", protect, attachGym, validateDateParams, async
         startDate,
         endDate,
       );
-
+      
+      logger.info(`Attendance analytics fetched for gym ${req.gymId} successfully`);
+      logger.info(`Peak hours analytics fetched for gym ${req.gymId} successfully`);
+      logger.info(`Weekly patterns analytics fetched for gym ${req.gymId} successfully`);
+      logger.info(`Monthly trends analytics fetched for gym ${req.gymId} successfully`);
       res.json({
         projections,
         paymentAnalysis,
@@ -486,18 +514,17 @@ router.get("/analytics/financial", protect, attachGym, validateDateParams, async
         },
       });
     } catch (error) {
-      logger.error(error);
-      res.status(500).json({ message: "Server error" });
+      handleError(error, req, res);
     }
   },
 );
 
-router.get('/upcoming-renewals', protect, attachGym, async (req, res) => {
+router.get("/upcoming-renewals", protect, attachGym, async (req, res) => {
   try {
     // Create dates in UTC
     const today = new Date();
     today.setUTCHours(0, 0, 0, 0);
-    
+
     const sevenDaysFromNow = new Date();
     sevenDaysFromNow.setDate(today.getDate() + 7);
     sevenDaysFromNow.setUTCHours(23, 59, 59, 999);
@@ -505,17 +532,20 @@ router.get('/upcoming-renewals', protect, attachGym, async (req, res) => {
     const upcomingRenewals = await Member.find({
       membership_end_date: {
         $gte: today,
-        $lte: sevenDaysFromNow
+        $lte: sevenDaysFromNow,
       },
-      membership_status: 'Active',
-      gymId: req.gymId
-    }).select('name number membership_type membership_end_date membership_amount');
+      membership_status: "Active",
+      gymId: req.gymId,
+    }).select(
+      "name number membership_type membership_end_date membership_amount",
+    );
 
     const totalExpectedRevenue = upcomingRenewals.reduce(
       (total, member) => total + (member.membership_amount || 0),
-      0
+      0,
     );
-
+    
+    logger.info(`Upcoming renewals fetched for gym ${req.gymId} successfully`);
     res.json({
       renewals: upcomingRenewals,
       totalCount: upcomingRenewals.length,
@@ -523,60 +553,66 @@ router.get('/upcoming-renewals', protect, attachGym, async (req, res) => {
       queryDetails: {
         dateRange: {
           from: today,
-          to: sevenDaysFromNow
+          to: sevenDaysFromNow,
         },
-        gymId: req.gymId
-      }
+        gymId: req.gymId,
+      },
     });
   } catch (error) {
-    logger.error('Error fetching upcoming renewals:', error);
-    res.status(500).json({ 
-      message: 'Error fetching upcoming renewals',
-      error: error.message
-    });
+    handleError(error, req, res);
   }
 });
 
-router.get('/due-details', protect, attachGym, async (req, res) => {
+router.get("/due-details", protect, attachGym, async (req, res) => {
   try {
     // Find all members with due amounts greater than 0
-    const members = await member.find({ 
-      gymId: req.gymId,
-      member_total_due_amount: { $gt: 0 } 
-    })
-    .select('name number member_total_due_amount last_due_payment_date last_payment_date membership_type')
-    .sort({ member_total_due_amount: -1 }); // Sort by highest due amount first
+    const members = await member
+      .find({
+        gymId: req.gymId,
+        member_total_due_amount: { $gt: 0 },
+      })
+      .select(
+        "name number member_total_due_amount last_due_payment_date last_payment_date membership_type",
+      )
+      .sort({ member_total_due_amount: -1 }); // Sort by highest due amount first
 
     // Calculate statistics
-    const totalDue = members.reduce((sum, member) => sum + member.member_total_due_amount, 0);
+    const totalDue = members.reduce(
+      (sum, member) => sum + member.member_total_due_amount,
+      0,
+    );
     const averageDueAmount = members.length > 0 ? totalDue / members.length : 0;
-    const highestDueAmount = members.length > 0 ? members[0].member_total_due_amount : 0;
-    const lowestDueAmount = members.length > 0 ? members[members.length - 1].member_total_due_amount : 0;
+    const highestDueAmount =
+      members.length > 0 ? members[0].member_total_due_amount : 0;
+    const lowestDueAmount =
+      members.length > 0
+        ? members[members.length - 1].member_total_due_amount
+        : 0;
 
     // Get payment history for members with dues
     const paymentHistory = await Renew.find({
       gymId: req.gymId,
-      number: { $in: members.map(m => m.number) },
-      is_due_payment: true
+      number: { $in: members.map((m) => m.number) },
+      is_due_payment: true,
     })
-    .sort({ membership_payment_date: -1 })
-    .limit(50); // Limit to last 50 due payments
+      .sort({ membership_payment_date: -1 })
+      .limit(50); // Limit to last 50 due payments
 
     // Group payments by member
     const memberPayments = {};
-    paymentHistory.forEach(payment => {
+    paymentHistory.forEach((payment) => {
       if (!memberPayments[payment.number]) {
         memberPayments[payment.number] = [];
       }
       memberPayments[payment.number].push({
         amount: payment.membership_amount,
         date: payment.membership_payment_date,
-        mode: payment.membership_payment_mode
+        mode: payment.membership_payment_mode,
       });
     });
 
     // Enhance member data with payment history
-    const enhancedMembers = members.map(m => ({
+    const enhancedMembers = members.map((m) => ({
       _id: m._id,
       name: m.name,
       number: m.number,
@@ -584,9 +620,10 @@ router.get('/due-details', protect, attachGym, async (req, res) => {
       membership_type: m.membership_type,
       last_payment_date: m.last_payment_date,
       last_due_payment_date: m.last_due_payment_date,
-      payment_history: memberPayments[m.number] || []
+      payment_history: memberPayments[m.number] || [],
     }));
-
+    
+    logger.info("Enhanced members data fetched successfully");
     res.json({
       members: enhancedMembers,
       totalDue,
@@ -594,20 +631,15 @@ router.get('/due-details', protect, attachGym, async (req, res) => {
         totalMembers: members.length,
         averageDueAmount,
         highestDueAmount,
-        lowestDueAmount
+        lowestDueAmount,
       },
       summary: {
         totalPaymentsProcessed: paymentHistory.length,
-        recentPayments: paymentHistory.slice(0, 5) // Last 5 payments
-      }
+        recentPayments: paymentHistory.slice(0, 5), // Last 5 payments
+      },
     });
-
   } catch (error) {
-    logger.error('Error fetching due details:', error);
-    res.status(500).json({ 
-      message: 'Error fetching due details', 
-      error: error.message 
-    });
+    handleError(error, req, res);
   }
 });
 

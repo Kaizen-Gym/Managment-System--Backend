@@ -10,13 +10,62 @@ import { fileURLToPath } from "url";
 import fs from "fs/promises";
 import os from "os";
 import mongoose from "mongoose";
+import { AppError, handleError } from "../utils/errorHandler.js";
 
-
-import { getNextBackupTime } from '../utils/scheduler.js';
+import { getNextBackupTime } from "../utils/scheduler.js";
 
 // Fix __dirname for ES modules
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+// Helper function to get storage info
+async function getStorageInfo(backupsDir) {
+  try {
+    const backupFiles = await fs.readdir(backupsDir);
+    if (backupFiles.length === 0) {
+      return {
+        backupDirectory: backupsDir,
+        totalBackups: 0,
+        oldestBackup: "N/A",
+        newestBackup: "N/A",
+        totalSize: "0 MB",
+      };
+    }
+
+    const backupStats = await Promise.all(
+      backupFiles.map(async (file) => {
+        const stat = await fs.stat(path.join(backupsDir, file));
+        return {
+          name: file,
+          time: stat.mtime,
+          size: stat.size,
+        };
+      }),
+    );
+
+    backupStats.sort((a, b) => a.time - b.time);
+    const totalSize =
+      Math.round(
+        (backupStats.reduce((acc, curr) => acc + curr.size, 0) /
+          (1024 * 1024)) *
+          100,
+      ) / 100;
+
+    return {
+      backupDirectory: backupsDir,
+      totalBackups: backupStats.length,
+      oldestBackup: backupStats[0].time.toLocaleString(),
+      newestBackup: backupStats[backupStats.length - 1].time.toLocaleString(),
+      totalSize: `${totalSize} MB`,
+    };
+  } catch (error) {
+    logger.error(`Error getting storage info: ${error.message}`);
+    return {
+      backupDirectory: backupsDir,
+      error: "Error getting storage info",
+    };
+  }
+}
 
 const router = Router();
 
@@ -37,12 +86,12 @@ router.get("/settings", protect, attachGym, async (req, res) => {
   try {
     const settings = await Settings.findOne({ gymId: req.gymId });
     if (!settings) {
-      return res.status(404).json({ message: "Settings not found" });
+      throw new AppError("Settings not found", 404);
     }
+    logger.info(`Retrieved settings for gym ${req.gymId}`);
     res.json(settings);
   } catch (error) {
-    logger.error(error);
-    res.status(500).json({ message: "Server error", error: error.message });
+    handleError(error, req, res);
   }
 });
 
@@ -54,23 +103,29 @@ router.put("/settings", protect, attachGym, async (req, res) => {
       req.body,
       { new: true, upsert: true },
     );
+    logger.info(`Updated settings for gym ${req.gymId}`, {
+      updatedFields: Object.keys(req.body),
+    });
+
     res.json(settings);
   } catch (error) {
-    logger.error(error);
-    res.status(500).json({ message: "Server error", error: error.message });
+    handleError(error, req, res);
   }
 });
 
 // Create backup
 router.post("/settings/backup", protect, attachGym, async (req, res) => {
   try {
+    logger.info(`Starting backup process for gym ${req.gymId}`);
     await databaseBackup.createBackup(req.gymId);
     // Also clean up old backups
     await databaseBackup.deleteOldBackups();
+
+    logger.info(`Backup completed successfully for gym ${req.gymId}`);
     res.status(200).json({ message: "Backup completed successfully" });
   } catch (error) {
-    logger.error("Backup error:", error);
-    res.status(500).json({ message: "Backup failed" });
+    logger.error(`Backup failed for gym ${req.gymId}: ${error.message}`);
+    handleError(new AppError("Backup failed", 500), req, res);
   }
 });
 
@@ -78,12 +133,11 @@ router.post("/settings/backup", protect, attachGym, async (req, res) => {
 router.get("/settings/backups", protect, attachGym, async (req, res) => {
   try {
     const backups = await databaseBackup.listBackups();
+    logger.info(`Retrieved ${backups.length} backups for gym ${req.gymId}`);
     res.json(backups);
   } catch (error) {
-    logger.error("Error listing backups:", error);
-    res
-      .status(500)
-      .json({ message: "Failed to list backups", error: error.message });
+    logger.error(`Failed to list backups: ${error.message}`);
+    handleError(new AppError("Failed to list backups", 500), req, res);
   }
 });
 
@@ -97,21 +151,20 @@ router.post(
       const { filename } = req.params;
       const backupPath = path.join(databaseBackup.BACKUP_DIR, filename);
 
-      // Verify file exists
       await fs.access(backupPath);
+      logger.info(`Starting restore process from backup: ${filename}`);
 
-      // Perform restore
       await databaseBackup.restoreBackup(backupPath, req.gymId);
 
+      logger.info(`Restore completed successfully from backup: ${filename}`);
       res.json({ message: "Restore completed successfully" });
     } catch (error) {
-      logger.error("Restore error:", error);
-      res.status(500).json({ message: "Restore failed", error: error.message });
+      logger.error(`Restore failed: ${error.message}`);
+      handleError(new AppError("Restore failed", 500), req, res);
     }
   },
 );
 
-// Upload backup file
 router.post(
   "/settings/upload-backup",
   protect,
@@ -120,15 +173,21 @@ router.post(
   async (req, res) => {
     try {
       if (!req.file) {
-        return res.status(400).json({ message: "No backup file provided" });
+        throw new AppError("No backup file provided", 400);
       }
+
+      logger.info(`Backup file uploaded successfully: ${req.file.filename}`, {
+        size: req.file.size,
+        type: req.file.mimetype,
+      });
+
       res.json({
         message: "Backup file uploaded successfully",
         filename: req.file.filename,
       });
     } catch (error) {
-      logger.error("Upload error:", error);
-      res.status(500).json({ message: "Upload failed", error: error.message });
+      logger.error(`Upload failed: ${error.message}`);
+      handleError(error, req, res);
     }
   },
 );
@@ -137,26 +196,28 @@ router.post(
 router.delete("/settings/logs", protect, attachGym, async (req, res) => {
   try {
     // Implement your log clearing logic here
+    logger.info(`Clearing logs for gym ${req.gymId}`);
     res.json({ message: "Logs cleared successfully" });
   } catch (error) {
-    logger.error(error);
-    res.status(500).json({ message: "Server error", error: error.message });
+    logger.error(`Failed to clear logs: ${error.message}`);
+    handleError(error, req, res);
   }
 });
 
+// Get system information
 router.get("/settings/system-info", protect, attachGym, async (req, res) => {
   try {
-    // Get database stats
+    logger.info(`Fetching system information for gym ${req.gymId}`);
+
     const dbStats = await mongoose.connection.db.stats();
+    const backupsDir = path.join(__dirname, "..", "backups");
 
     // Get last backup info
-    const backupsDir = path.join(__dirname, "..", "backups");
     let lastBackup = "No backups found";
     try {
-      // Ensure backup directory exists
       await fs.mkdir(backupsDir, { recursive: true });
-
       const files = await fs.readdir(backupsDir);
+
       if (files.length > 0) {
         const sortedFiles = await Promise.all(
           files.map(async (file) => ({
@@ -171,20 +232,16 @@ router.get("/settings/system-info", protect, attachGym, async (req, res) => {
         }
       }
     } catch (error) {
-      logger.error("Error getting backup info:", error);
+      logger.error(`Error getting backup info: ${error.message}`);
       lastBackup = "Error getting backup info";
     }
 
-    // Get MongoDB version and other info
     const serverStatus = await mongoose.connection.db.command({
       serverStatus: 1,
     });
-
-    // Calculate database size in MB
     const dbSizeInMB =
       Math.round((dbStats.dataSize / (1024 * 1024)) * 100) / 100;
 
-    // Get system information
     const systemInfo = {
       lastBackup,
       system: {
@@ -218,144 +275,91 @@ router.get("/settings/system-info", protect, attachGym, async (req, res) => {
         },
         cpus: os.cpus().length,
       },
-      storageInfo: {
-        backupDirectory: backupsDir,
-        totalBackups: 0,
-        oldestBackup: "N/A",
-        newestBackup: "N/A",
-      },
+      storageInfo: await getStorageInfo(backupsDir),
     };
 
-    // Get backup storage information
-    try {
-      const backupFiles = await fs.readdir(backupsDir);
-      if (backupFiles.length > 0) {
-        const backupStats = await Promise.all(
-          backupFiles.map(async (file) => {
-            const stat = await fs.stat(path.join(backupsDir, file));
-            return {
-              name: file,
-              time: stat.mtime,
-              size: stat.size,
-            };
-          }),
-        );
-
-        backupStats.sort((a, b) => a.time - b.time);
-        systemInfo.storageInfo = {
-          ...systemInfo.storageInfo,
-          totalBackups: backupStats.length,
-          oldestBackup: backupStats[0].time.toLocaleString(),
-          newestBackup:
-            backupStats[backupStats.length - 1].time.toLocaleString(),
-          totalSize:
-            Math.round(
-              (backupStats.reduce((acc, curr) => acc + curr.size, 0) /
-                (1024 * 1024)) *
-                100,
-            ) /
-              100 +
-            " MB",
-        };
-      }
-    } catch (error) {
-      logger.error("Error getting backup storage info:", error);
-    }
-
-    // Skip mongotop command as it might not be available
-    systemInfo.performance = "Performance metrics unavailable";
-
+    logger.info(
+      `System information retrieved successfully for gym ${req.gymId}`,
+    );
     res.status(200).json({
       success: true,
       data: systemInfo,
     });
   } catch (error) {
-    logger.error("Error getting system info:", error);
-    res.status(500).json({
-      success: false,
-      message: "Error getting system information",
-      error: error.message,
-    });
+    logger.error(`Error getting system info: ${error.message}`);
+    handleError(error, req, res);
   }
 });
 
-router.get('/settings/next-backup', protect, attachGym, (req, res) => {
-  const nextBackup = getNextBackupTime();
-  res.json({
-    nextBackup,
-    timezone: 'IST',
-    message: `Next backup scheduled for ${nextBackup.toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}`
-  });
+// Get next backup time
+router.get("/settings/next-backup", protect, attachGym, (req, res) => {
+  try {
+    const nextBackup = getNextBackupTime();
+    logger.info(
+      `Next backup time retrieved for gym ${req.gymId}: ${nextBackup}`,
+    );
+
+    res.json({
+      nextBackup,
+      timezone: "IST",
+      message: `Next backup scheduled for ${nextBackup.toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })}`,
+    });
+  } catch (error) {
+    logger.error(`Error getting next backup time: ${error.message}`);
+    handleError(error, req, res);
+  }
 });
 
-router.post('/settings/gym/validate', protect, attachGym, async (req, res) => {
+// Validate gym settings
+router.post("/settings/gym/validate", protect, attachGym, async (req, res) => {
   try {
     const { gymName, gymAddress, contactEmail, contactPhone } = req.body;
     const errors = {};
 
-    // Validate gym name
+    // Validation logic
     if (!gymName || gymName.length < 2) {
-      errors.gymName = 'Gym name must be at least 2 characters long';
+      errors.gymName = "Gym name must be at least 2 characters long";
     }
-
-    // Validate address
     if (!gymAddress || gymAddress.length < 5) {
-      errors.gymAddress = 'Please provide a valid address';
+      errors.gymAddress = "Please provide a valid address";
     }
-
-    // Validate email
-    /* eslint-disable */
-    const emailRegex = /^\w+([\.-]?\w+)*@\w+([\.-]?\w+)*(\.\w{2,3})+$/;
+    const emailRegex = /^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,3})+$/;
     if (!contactEmail || !emailRegex.test(contactEmail)) {
-      errors.contactEmail = 'Please provide a valid email address';
+      errors.contactEmail = "Please provide a valid email address";
     }
-
-    // Validate phone
     const phoneRegex = /^\d{10}$/;
     if (!contactPhone || !phoneRegex.test(contactPhone)) {
-      errors.contactPhone = 'Please provide a valid 10-digit phone number';
+      errors.contactPhone = "Please provide a valid 10-digit phone number";
     }
 
     if (Object.keys(errors).length > 0) {
-      return res.status(400).json({ errors });
+      throw new AppError(JSON.stringify(errors), 400);
     }
 
-    res.json({ success: true, message: 'All fields are valid' });
+    logger.info(`Gym settings validated successfully for gym ${req.gymId}`);
+    res.json({ success: true, message: "All fields are valid" });
   } catch (error) {
-    logger.error('Error validating gym settings:', error);
-    res.status(500).json({ 
-      success: false,
-      message: 'Error validating settings', 
-      error: error.message 
-    });
+    logger.error(`Validation error for gym ${req.gymId}: ${error.message}`);
+    handleError(error, req, res);
   }
 });
 
 // Get gym settings
 router.get("/settings/gym", protect, attachGym, async (req, res) => {
   try {
-    // Find settings for the current gym or create default settings
-    let settings = await Settings.findOne({ gymId: req.gymId });
-
+    const settings = await Settings.findOne({ gymId: req.gymId });
     if (!settings) {
-      res.status(404).json({
-        success: false,
-        message: 'Gym not found',
-      })
+      throw new AppError("Gym settings not found", 404);
     }
 
+    logger.info(`Retrieved gym settings for gym ${req.gymId}`);
     res.status(200).json({
       success: true,
       data: settings,
     });
-    logger.info(settings)
   } catch (error) {
-    logger.error("Error fetching gym settings:", error);
-    res.status(500).json({
-      success: false,
-      message: "Error fetching gym settings",
-      error: error.message,
-    });
+    logger.error(`Error fetching gym settings: ${error.message}`);
+    handleError(error, req, res);
   }
 });
 
@@ -366,81 +370,59 @@ router.put("/settings/gym", protect, attachGym, async (req, res) => {
 
     // Validation
     if (!gymName || !gymAddress || !contactEmail || !contactPhone) {
-      return res.status(400).json({
-        success: false,
-        message: "All fields are required",
-      });
+      throw new AppError("All fields are required", 400);
     }
 
-    // Email validation
-    /* eslint-disable */
-    const emailRegex = /^\w+([\.-]?\w+)*@\w+([\.-]?\w+)*(\.\w{2,3})+$/;
+    const emailRegex = /^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,3})+$/;
     if (!emailRegex.test(contactEmail)) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid email format",
-      });
+      throw new AppError("Invalid email format", 400);
     }
 
-    // Phone validation (basic example - adjust according to your needs)
-    const phoneRegex = /^\d{10}$/; // Assumes 10-digit phone number
+    const phoneRegex = /^\d{10}$/;
     if (!phoneRegex.test(contactPhone.replace(/[-\s]/g, ""))) {
-      // Remove hyphens and spaces before validation
-      return res.status(400).json({
-        success: false,
-        message: "Invalid phone number format. Please enter 10 digits.",
-      });
+      throw new AppError(
+        "Invalid phone number format. Please enter 10 digits.",
+        400,
+      );
     }
 
-    // Update or create settings
     const settings = await Settings.findOneAndUpdate(
       { gymId: req.gymId },
-      {
-        gymName,
-        gymAddress,
-        contactEmail,
-        contactPhone,
-      },
-      {
-        new: true, // Return updated document
-        upsert: true, // Create if doesn't exist
-        runValidators: true, // Run model validations
-      }
+      { gymName, gymAddress, contactEmail, contactPhone },
+      { new: true, upsert: true, runValidators: true },
     );
 
-    logger.info(`Gym settings updated for gym: ${req.gymId}`);
+    logger.info(`Updated gym settings for gym ${req.gymId}`, {
+      updatedFields: { gymName, gymAddress, contactEmail, contactPhone },
+    });
+
     res.json({
       success: true,
       message: "Settings updated successfully",
       data: settings,
     });
   } catch (error) {
-    logger.error("Error updating gym settings:", error);
-    res.status(500).json({
-      success: false,
-      message: "Error updating gym settings",
-      error: error.message,
-    });
+    logger.error(`Error updating gym settings: ${error.message}`);
+    handleError(error, req, res);
   }
 });
 
 // Delete gym settings
 router.delete("/settings/gym", protect, attachGym, async (req, res) => {
   try {
-    await Settings.findOneAndDelete({ gymId: req.gymId });
+    const settings = await Settings.findOneAndDelete({ gymId: req.gymId });
+    if (!settings) {
+      throw new AppError("Settings not found", 404);
+    }
 
-    logger.info(`Gym settings deleted for gym: ${req.gymId}`);
+    logger.info(`Deleted gym settings for gym ${req.gymId}`);
     res.json({
       success: true,
       message: "Settings deleted successfully",
     });
   } catch (error) {
-    logger.error("Error deleting gym settings:", error);
-    res.status(500).json({
-      success: false,
-      message: "Error deleting gym settings",
-      error: error.message,
-    });
+    logger.error(`Error deleting gym settings: ${error.message}`);
+    handleError(error, req, res);
   }
 });
 
