@@ -184,9 +184,43 @@ export const analyzePeakHours = async (gymId, startDate, endDate) => {
 
 export const calculateMembershipGrowth = async (gymId) => {
   try {
-    const sixMonthsAgo = new Date();
-    sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+    const today = new Date();
+    const startOfCurrentMonth = new Date(
+      today.getFullYear(),
+      today.getMonth(),
+      1,
+    );
+    const endOfCurrentMonth = new Date(
+      today.getFullYear(),
+      today.getMonth() + 1,
+      0,
+    );
 
+    // Get current month's new members
+    const currentMonthGrowth = await Member.aggregate([
+      {
+        $match: {
+          gymId: new mongoose.Types.ObjectId(gymId),
+          createdAt: {
+            $gte: startOfCurrentMonth,
+            $lte: endOfCurrentMonth,
+          },
+        },
+      },
+      {
+        $group: {
+          _id: {
+            year: { $year: "$createdAt" },
+            month: { $month: "$createdAt" },
+          },
+          newMembers: { $sum: 1 },
+          totalRevenue: { $sum: "$membership_amount" },
+        },
+      },
+    ]);
+
+    // Get historical growth data for trends
+    const sixMonthsAgo = new Date(today.getFullYear(), today.getMonth() - 6, 1);
     const monthlyGrowth = await Member.aggregate([
       {
         $match: {
@@ -207,22 +241,18 @@ export const calculateMembershipGrowth = async (gymId) => {
       { $sort: { "_id.year": 1, "_id.month": 1 } },
     ]);
 
-    const growthRate = monthlyGrowth.map((month, index, array) => {
-      if (index === 0) return { ...month, growthRate: 0 };
-      const previousMonth = array[index - 1];
-      const growthRate =
-        ((month.newMembers - previousMonth.newMembers) /
-          previousMonth.newMembers) *
-        100;
-      return { ...month, growthRate };
+    // Calculate total growth (all-time total members)
+    const totalGrowth = await Member.countDocuments({
+      gymId: new mongoose.Types.ObjectId(gymId),
     });
 
     return {
-      monthlyGrowth: growthRate,
-      totalGrowth: monthlyGrowth.reduce(
-        (acc, curr) => acc + curr.newMembers,
-        0,
-      ),
+      currentMonthGrowth: currentMonthGrowth[0] || {
+        newMembers: 0,
+        totalRevenue: 0,
+      },
+      monthlyGrowth,
+      totalGrowth,
     };
   } catch (error) {
     throw new Error(`Error calculating membership growth: ${error.message}`);
