@@ -21,6 +21,7 @@ import utilsRoutes from "./routes/utilsRoutes.js";
 import userRoutes from "./routes/userRoutes.js";
 import roleRoutes from "./routes/roleRoutes.js";
 import settingsRoutes from "./routes/settingsRoutes.js";
+import logRoutes from "./routes/logRoutes.js";
 
 // utils
 import { initializeScheduledTasks } from "./utils/scheduler.js";
@@ -124,6 +125,7 @@ app.use("/api/utils", utilsRoutes);
 app.use("/api", userRoutes);
 app.use("/api", roleRoutes);
 app.use("/api", settingsRoutes);
+app.use('/api/logs', logRoutes)
 
 // Catch-all for undefined API routes
 app.use("/api/*", (req, res) => {
