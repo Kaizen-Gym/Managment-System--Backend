@@ -61,11 +61,11 @@ const memberScheme = new mongoose.Schema({
 
 // In your Member model
 memberScheme.index({ name: 1 });
-memberScheme.index({ email: 1 });
-memberScheme.index({ number: 1 });
-memberScheme.index({ id: 1 });
-memberScheme.index({ membership_type: 1 });
-memberScheme.index({ gymId: 1 }); // Important for filtering by gym
+memberScheme.index({ email: 2 });
+memberScheme.index({ number: 3 });
+memberScheme.index({ id: 4 });
+memberScheme.index({ membership_type: 5 });
+memberScheme.index({ gymId: 6 }); // Important for filtering by gym
 
 // Add a pre-save middleware to set amount and duration from the plan
 memberScheme.pre("save", async function (next) {

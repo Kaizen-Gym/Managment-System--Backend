@@ -6,18 +6,11 @@ import jwt from "jsonwebtoken";
 import logger from "../utils/logger.js";
 import protect from "../middleware/protect.js";
 import attachGym from "../middleware/attachGym.js";
+import { AppError, handleError } from '../utils/errorHandler.js';
 
 const router = express.Router();
 
 const refreshTokens = new Map();
-
-const cookieOptions = {
-  httpOnly: true,
-  secure: process.env.NODE_ENV === "production", // false in development
-  sameSite: "lax", // Important for cross-site cookies
-  path: "/",
-  maxAge: 24 * 60 * 60 * 1000, // 24 hours
-};
 
 // Generate JWT Token
 const generateTokens = (user) => {
@@ -42,40 +35,32 @@ router.post("/register", async (req, res) => {
       req.body;
 
     if (!name || !gender || !age || !email || !number || !password || !gymId) {
-      return res
-        .status(400)
-        .json({ message: "All required fields must be filled" });
+      throw new AppError('All required fields must be filled', 400);
     }
 
     const userExists = await User.findOne({ email });
     if (userExists)
-      return res.status(409).json({ message: "User already exists" });
+      throw new AppError('User already exists', 409);
 
     // Check if any admin exists in the system
     const adminExists = await User.findOne({ user_type: "Admin" });
     if (adminExists) {
       if (!req.headers.authorization) {
-        return res
-          .status(403)
-          .json({ message: "Not authorized to create accounts" });
+        throw new AppError('Not authorized to create accounts', 403);
       }
       const token = req.headers.authorization.split(" ")[1]?.trim();
       if (!token) {
-        return res
-          .status(403)
-          .json({ message: "Not authorized to create accounts" });
+        throw new AppError('Not authorized to create accounts', 403);
       }
       try {
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
         const currentUser = await User.findById(decoded.id);
         if (!currentUser || currentUser.user_type !== "Admin") {
-          return res
-            .status(403)
-            .json({ message: "Not authorized to create accounts" });
+          throw new AppError('Not authorized to create accounts', 403);
         }
       } catch (error) {
-        logger.error("Invalid token", error);
-        return res.status(403).json({ message: "Invalid token" });
+        logger.error(`Token verification failed: ${error.message}`);
+        throw new AppError('Invalid token', 403);
       }
     } else {
       // Bootstrapping: If no admin exists, allow registration of the first account.
@@ -125,7 +110,9 @@ router.post("/register", async (req, res) => {
       permissions: defaultPermissions,
       gymId: gymId,
     });
-
+    
+    logger.info(`New user registered: ${email} with role ${user_type}`);
+    
     res.status(201).json({
       _id: user._id,
       name: user.name,
@@ -137,8 +124,7 @@ router.post("/register", async (req, res) => {
     });
     logger.info(`User registered: ${user.name}`);
   } catch (error) {
-    logger.error(error);
-    res.status(500).json({ message: "Server error", error });
+    handleError(error, req, res);
   }
 });
 
@@ -149,7 +135,7 @@ router.post("/login", async (req, res) => {
     const user = await User.findOne({ email });
 
     if (!user || !(await user.matchPassword(password))) {
-      return res.status(401).json({ message: "Invalid credentials" });
+      throw new AppError('Email and password are required', 400);
     }
 
     // Generate token
@@ -168,10 +154,7 @@ router.post("/login", async (req, res) => {
       maxAge: 24 * 60 * 60 * 1000, // 1 day
     });
 
-    logger.info("Cookie set:", {
-      token: accessToken,
-      cookieHeader: res.getHeader("Set-Cookie"),
-    });
+    logger.info(`User logged in: ${user.email}`);
 
     res.json({
       _id: user._id,
@@ -182,8 +165,7 @@ router.post("/login", async (req, res) => {
       gymId: user.gymId,
     });
   } catch (error) {
-    logger.error("Login error:", error);
-    res.status(500).json({ message: "Error logging in" });
+    handleError(error, req, res);
   }
 });
 
@@ -192,16 +174,17 @@ router.get("/session", async (req, res) => {
     const accessToken = req.cookies.accessToken;
 
     if (!accessToken) {
-      return res.status(401).json({ authenticated: false });
+      throw new AppError('No access token provided', 401);
     }
 
     const decoded = jwt.verify(accessToken, process.env.JWT_SECRET);
     const user = await User.findById(decoded.id).select("-password");
 
     if (!user) {
-      return res.status(401).json({ authenticated: false });
+      throw new AppError('User not found', 402);
     }
-
+    
+    logger.info(`Session verified for user: ${user.email}`);
     res.json({
       authenticated: true,
       user: {
@@ -214,8 +197,7 @@ router.get("/session", async (req, res) => {
       },
     });
   } catch (error) {
-    logger.error("Session check error:", error);
-    res.status(401).json({ authenticated: false });
+    handleError(error, req, res);
   }
 });
 
@@ -224,7 +206,7 @@ router.post("/refresh-token", async (req, res) => {
   const refreshToken = req.cookies.refreshToken;
 
   if (!refreshToken) {
-    return res.status(401).json({ message: "No refresh token" });
+    throw new AppError('No refresh token', 401);
   }
 
   try {
@@ -232,7 +214,7 @@ router.post("/refresh-token", async (req, res) => {
     const user = await User.findById(decoded.id);
 
     if (!user || refreshTokens.get(user._id.toString()) !== refreshToken) {
-      return res.status(401).json({ message: "Invalid refresh token" });
+      throw new AppError('Invalid refresh token', 401);
     }
 
     const { accessToken, refreshToken: newRefreshToken } = generateTokens(user);
@@ -254,11 +236,11 @@ router.post("/refresh-token", async (req, res) => {
       sameSite: "strict",
       maxAge: 7 * 24 * 60 * 60 * 1000,
     });
-
+    
+    logger.info(`Tokens refreshed for user: ${user.email}`);
     res.json({ success: true });
   } catch (error) {
-    logger.error("Token refresh error:", error);
-    res.status(401).json({ message: "Invalid refresh token" });
+    handleError(error, req, res);
   }
 });
 
@@ -279,22 +261,9 @@ router.post("/logout", (req, res) => {
   // Clear cookies
   res.clearCookie("accessToken");
   res.clearCookie("refreshToken");
+  logger.info(`User logged out successfully: ${req.user.email}`);
 
   res.json({ message: "Logged out successfully" });
-});
-
-// **Logout User**
-router.post("/logout", protect, attachGym, async (req, res) => {
-  try {
-    res.clearCookie("token", { path: "/" });
-    res.status(200).json({
-      message:
-        "Logged out successfully. Please remove token from local storage.",
-    });
-  } catch (error) {
-    logger.error(error);
-    res.status(500).json({ message: "Server error", error: error.message });
-  }
 });
 
 // **Get User Profile**
@@ -304,11 +273,14 @@ router.get("/profile", protect, attachGym, async (req, res) => {
       .select("-password")
       .populate("gymId"); // This will populate all gym fields
 
-    if (!user) return res.status(404).json({ message: "User not found" });
+    if (!user) {
+      throw new AppError('User not found', 404);
+    }
+    
+    logger.info(`Profile retrieved for user: ${user.email}`);
     res.json(user);
   } catch (error) {
-    logger.error(error);
-    res.status(500).json({ message: "Server error", error: error.message });
+    handleError(error, req, res);
   }
 });
 
@@ -316,11 +288,14 @@ router.get("/profile", protect, attachGym, async (req, res) => {
 router.get("/check-role", protect, attachGym, async (req, res) => {
   try {
     const user = await User.findById(req.user.id).select("user_type");
-    if (!user) return res.status(404).json({ message: "User not found" });
+    if (!user) {
+      throw new AppError('User not found', 404);
+    }
+    
+    logger.info(`Role checked for user: ${req.user.id} - ${user.user_type}`);
     res.json({ role: user.user_type });
   } catch (error) {
-    logger.error(error);
-    res.status(500).json({ message: "Server error", error: error.message });
+    handleError(error, req, res);
   }
 });
 

@@ -22,6 +22,7 @@ import {
 } from "../utils/analytics.js";
 import { validateDateParams } from "../utils/dateValidation.js";
 import Member from "../models/member.js";
+import { handleError } from "../utils/errorHandler.js";
 
 const router = express.Router();
 
@@ -105,10 +106,10 @@ router.get("/membership/members", protect, attachGym, async (req, res) => {
 
     // Merge gymId filter with the rest of the filters
     const members = await member.find({ ...filter, gymId: req.gymId });
+    logger.info(`Fetched ${members.length} members`);
     res.json(members);
   } catch (error) {
-    logger.error(error);
-    res.status(500).json({ message: "Server Error", error: error.message });
+    handleError(error, req, res);
   }
 });
 
@@ -223,7 +224,8 @@ router.get("/membership", protect, attachGym, async (req, res) => {
     };
     const membershipRenewalRate =
       totalActiveMembers > 0 ? (totalRenewals / totalActiveMembers) * 100 : 0;
-
+    
+    logger.info(`fetched payment methods breakdown for gym ${gymId} successfully`)
     res.json({
       totalActiveMembers,
       newMemberSignups,
@@ -236,8 +238,7 @@ router.get("/membership", protect, attachGym, async (req, res) => {
       paymentMethodsBreakdown,
     });
   } catch (error) {
-    logger.error(error);
-    res.status(500).json({ message: "Server error", error: error.message });
+    handleError(error, req, res);
   }
 });
 
@@ -342,7 +343,8 @@ router.get("/financial", protect, attachGym, async (req, res) => {
       totalPendingPayments,
       totalFailedPayments,
     };
-
+    
+    logger.info(`Payment summary fetched for gym ${req.gymId} successfully`);
     res.json({
       totalRevenue,
       totalDue, // Include total due in response
@@ -352,8 +354,7 @@ router.get("/financial", protect, attachGym, async (req, res) => {
       paymentMethodsBreakdown,
     });
   } catch (error) {
-    logger.error(error);
-    res.status(500).json({ message: "Server error", error: error.message });
+    handleError(error, req, res);
   }
 });
 
@@ -387,7 +388,8 @@ router.get(
         endDate,
       );
       const trends = await getMembershipTrends(req.gymId, startDate, endDate);
-
+      
+      logger.info(`Membership analytics fetched for gym ${req.gymId} successfully`);
       res.json({
         retention: retentionData,
         churn: churnData,
@@ -396,8 +398,7 @@ router.get(
         trends,
       });
     } catch (error) {
-      logger.error(error);
-      res.status(500).json({ message: "Server error" });
+      handleError(error, req, res);
     }
   },
 );
@@ -437,7 +438,11 @@ router.get(
         startDate,
         endDate,
       );
-
+      
+      logger.info(`Attendance analytics fetched for gym ${req.gymId} successfully`);
+      logger.info(`Peak hours analytics fetched for gym ${req.gymId} successfully`);
+      logger.info(`Weekly patterns analytics fetched for gym ${req.gymId} successfully`);
+      logger.info(`Monthly trends analytics fetched for gym ${req.gymId} successfully`);
       res.json({
         peakHours,
         weeklyPatterns,
@@ -449,8 +454,7 @@ router.get(
         },
       });
     } catch (error) {
-      logger.error(error);
-      res.status(500).json({ message: "Server error" });
+      handleError(error, req, res);
     }
   },
 );
@@ -494,7 +498,11 @@ router.get(
         startDate,
         endDate,
       );
-
+      
+      logger.info(`Attendance analytics fetched for gym ${req.gymId} successfully`);
+      logger.info(`Peak hours analytics fetched for gym ${req.gymId} successfully`);
+      logger.info(`Weekly patterns analytics fetched for gym ${req.gymId} successfully`);
+      logger.info(`Monthly trends analytics fetched for gym ${req.gymId} successfully`);
       res.json({
         projections,
         paymentAnalysis,
@@ -506,8 +514,7 @@ router.get(
         },
       });
     } catch (error) {
-      logger.error(error);
-      res.status(500).json({ message: "Server error" });
+      handleError(error, req, res);
     }
   },
 );
@@ -537,7 +544,8 @@ router.get("/upcoming-renewals", protect, attachGym, async (req, res) => {
       (total, member) => total + (member.membership_amount || 0),
       0,
     );
-
+    
+    logger.info(`Upcoming renewals fetched for gym ${req.gymId} successfully`);
     res.json({
       renewals: upcomingRenewals,
       totalCount: upcomingRenewals.length,
@@ -551,11 +559,7 @@ router.get("/upcoming-renewals", protect, attachGym, async (req, res) => {
       },
     });
   } catch (error) {
-    logger.error("Error fetching upcoming renewals:", error);
-    res.status(500).json({
-      message: "Error fetching upcoming renewals",
-      error: error.message,
-    });
+    handleError(error, req, res);
   }
 });
 
@@ -618,7 +622,8 @@ router.get("/due-details", protect, attachGym, async (req, res) => {
       last_due_payment_date: m.last_due_payment_date,
       payment_history: memberPayments[m.number] || [],
     }));
-
+    
+    logger.info("Enhanced members data fetched successfully");
     res.json({
       members: enhancedMembers,
       totalDue,
@@ -634,11 +639,7 @@ router.get("/due-details", protect, attachGym, async (req, res) => {
       },
     });
   } catch (error) {
-    logger.error("Error fetching due details:", error);
-    res.status(500).json({
-      message: "Error fetching due details",
-      error: error.message,
-    });
+    handleError(error, req, res);
   }
 });
 

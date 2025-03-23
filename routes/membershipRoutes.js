@@ -8,108 +8,70 @@ import protect from "../middleware/protect.js";
 import attachGym from "../middleware/attachGym.js";
 import MembershipPlan from "../models/membershipPlan.js";
 import moment from "moment";
+import { AppError, handleError } from '../utils/errorHandler.js';
 
 const router = express.Router();
 
-// 🔹 Helper function to validate request body
+// Helper functions
 const validateRenewRequest = (body) => {
-  const {
-    number,
-    membership_type,
-    membership_amount,
-    membership_payment_status,
-    membership_payment_mode,
-  } = body;
+  const { number, membership_type, membership_amount, membership_payment_status, membership_payment_mode } = body;
 
-  if (
-    !number ||
-    !membership_type ||
-    !membership_amount ||
-    !membership_payment_status ||
-    !membership_payment_mode
-  ) {
-    return { valid: false, message: "All required fields must be filled" };
+  if (!number || !membership_type || !membership_amount || !membership_payment_status || !membership_payment_mode) {
+    throw new AppError('All required fields must be filled', 400);
   }
 
   const parsedAmount = Number(membership_amount);
   if (isNaN(parsedAmount)) {
-    return { valid: false, message: "Membership amount must be a number" };
+    throw new AppError('Membership amount must be a number', 400);
   }
 
   return { valid: true, parsedAmount };
 };
 
-const calculateNewExpiryDate = async (currentExpiry, membershipType) => {
-  logger.info(
-    `Calculating new expiry date for membership type: ${membershipType}`,
-  );
-
-  // Retrieve the membership plan by name
-  const planUsed = await MembershipPlan.findOne({ name: membershipType });
+const calculateNewExpiryDate = async (currentExpiry, membershipType, gymId) => {
+  const planUsed = await MembershipPlan.findOne({ name: membershipType, gymId });
   if (!planUsed) {
-    throw new Error(`Membership plan not found for type: ${membershipType}`);
+    throw new AppError(`Membership plan not found: ${membershipType}`, 404);
   }
 
-  // The membership plan duration is expected to be in the format "1M", "2M", etc.
-  // Extract the numeric value which represents the number of months.
   const durationMonths = parseInt(planUsed.duration, 10);
   if (isNaN(durationMonths)) {
-    throw new Error(`Invalid duration value: ${planUsed.duration}`);
+    throw new AppError(`Invalid plan duration: ${planUsed.duration}`, 400);
   }
 
-  // Calculate the new expiry date by adding the duration in months
-  const newExpiry = moment(currentExpiry)
-    .add(durationMonths, "months")
-    .toDate();
-  return newExpiry;
+  logger.info(`Calculating new expiry date: ${durationMonths} months from ${currentExpiry}`);
+  return moment(currentExpiry).add(durationMonths, "months").toDate();
 };
 
-// 🔹 Renew Membership
+// Renew Membership
 router.post("/renew", protect, attachGym, async (req, res) => {
   try {
-    const {
-      number,
-      membership_type,
-      membership_amount,
-      membership_due_amount,
-      membership_payment_status,
-      membership_payment_mode,
-    } = req.body;
+    const { number, membership_type, membership_amount, membership_due_amount, 
+            membership_payment_status, membership_payment_mode } = req.body;
 
-    // Validate required fields
     if (!number || !membership_type || membership_amount === undefined) {
-      return res
-        .status(400)
-        .json({ message: "All required fields must be filled" });
+      throw new AppError('All required fields must be filled', 400);
     }
 
-    // Convert amounts to numbers and validate
     const parsedAmount = Number(membership_amount);
     const parsedDueAmount = Number(membership_due_amount || 0);
 
     if (isNaN(parsedAmount) || isNaN(parsedDueAmount)) {
-      return res.status(400).json({ message: "Invalid amount values" });
+      throw new AppError('Invalid amount values', 400);
     }
 
-    // Find the existing member
     const existingMember = await member.findOne({ number, gymId: req.gymId });
     if (!existingMember) {
-      return res.status(404).json({ message: "Member not found" });
+      throw new AppError('Member not found', 404);
     }
 
-    // Calculate new expiry date
-    const currentExpiry =
-      existingMember.membership_end_date &&
-      new Date(existingMember.membership_end_date) > new Date()
-        ? new Date(existingMember.membership_end_date)
-        : new Date();
+    const currentExpiry = existingMember.membership_end_date && 
+                         new Date(existingMember.membership_end_date) > new Date()
+                         ? new Date(existingMember.membership_end_date)
+                         : new Date();
 
-    const newExpiryDate = await calculateNewExpiryDate(
-      currentExpiry,
-      membership_type,
-    );
+    const newExpiryDate = await calculateNewExpiryDate(currentExpiry, membership_type, req.gymId);
 
-    // Update member
     const updatedMember = await member.findOneAndUpdate(
       { number, gymId: req.gymId },
       {
@@ -121,14 +83,13 @@ router.post("/renew", protect, attachGym, async (req, res) => {
           membership_payment_mode,
           membership_end_date: newExpiryDate,
           membership_status: "Active",
-          member_total_due_amount: parsedDueAmount, // Directly set the due amount
+          member_total_due_amount: parsedDueAmount,
         },
-        $inc: { member_total_payment: parsedAmount - parsedDueAmount }, //Only increment the paid amount
+        $inc: { member_total_payment: parsedAmount - parsedDueAmount },
       },
-      { new: true },
+      { new: true }
     );
 
-    // Create renewal record
     await Renew.create({
       name: existingMember.name,
       number,
@@ -141,169 +102,144 @@ router.post("/renew", protect, attachGym, async (req, res) => {
       gymId: req.gymId,
     });
 
+    logger.info(`Membership renewed for member ${number} at gym ${req.gymId}`);
     res.status(201).json({
       message: "Membership renewed successfully",
       member: updatedMember,
     });
   } catch (error) {
-    logger.error(error);
-    res.status(500).json({ message: "Server error", error: error.message });
+    handleError(error, req, res);
   }
 });
 
-// 🔹 Get all renew records for the current gym
+// Get all renew records
 router.get("/renew", protect, attachGym, async (req, res) => {
   try {
     const renewRecords = await Renew.find({ gymId: req.gymId });
+    logger.info(`Retrieved ${renewRecords.length} renew records for gym ${req.gymId}`);
     res.status(200).json(renewRecords);
   } catch (error) {
-    logger.error(error);
-    res.status(500).json({ message: "Server error", error: error.message });
+    handleError(error, req, res);
   }
 });
 
-// 🔹 Get renew records for a specific user in the current gym
+// Get specific member's renew records
 router.get("/renew/:number", protect, attachGym, async (req, res) => {
   try {
     const number = Number(req.params.number);
-    const renewRecords = await Renew.find({
-      number,
-      gymId: req.gymId,
-    }).sort({ membership_payment_date: -1 }); // Sort by payment date desc
-
-    // Return empty array if no records found instead of 404
+    const renewRecords = await Renew.find({ number, gymId: req.gymId })
+                                  .sort({ membership_payment_date: -1 });
+    
+    logger.info(`Retrieved renew records for member ${number} at gym ${req.gymId}`);
     res.status(200).json(renewRecords);
   } catch (error) {
-    logger.error(error);
-    res.status(500).json({ message: "Server error", error: error.message });
+    handleError(error, req, res);
   }
 });
 
-// 🔹 Delete a renew record for the current gym
+// Delete renew record
 router.delete("/renew/:id", protect, attachGym, async (req, res) => {
   try {
     const { id } = req.params;
-    // Use findOne to ensure gymId filter is applied
     const renewRecord = await Renew.findOne({ _id: id, gymId: req.gymId });
+    
     if (!renewRecord) {
-      return res.status(404).json({ message: "Renew record not found" });
+      throw new AppError('Renew record not found', 404);
     }
+
     await Renew.deleteOne({ _id: id, gymId: req.gymId });
+    logger.info(`Deleted renew record ${id} from gym ${req.gymId}`);
     res.status(200).json({ message: "Renew record deleted successfully" });
   } catch (error) {
-    logger.error(error);
-    res.status(500).json({ message: "Server error", error: error.message });
+    handleError(error, req, res);
   }
 });
 
-// 🔹 Update a renew record for the current gym
+// Update renew record
 router.put("/renew/:id", protect, attachGym, async (req, res) => {
   try {
     const { id } = req.params;
-    // Use findOne to ensure gymId filter is applied
     const renewRecord = await Renew.findOne({ _id: id, gymId: req.gymId });
+    
     if (!renewRecord) {
-      return res.status(404).json({ message: "Renew record not found" });
+      throw new AppError('Renew record not found', 404);
     }
 
     const validation = validateRenewRequest(req.body);
-    if (!validation.valid)
-      return res.status(400).json({ message: validation.message });
-
-    const parsedAmount = validation.parsedAmount;
-    // Update renew record using a filter that includes gymId
-    await Renew.findOneAndUpdate(
+    const updatedRecord = await Renew.findOneAndUpdate(
       { _id: id, gymId: req.gymId },
       {
         membership_type: req.body.membership_type,
-        membership_amount: parsedAmount,
+        membership_amount: validation.parsedAmount,
         membership_payment_status: req.body.membership_payment_status,
         membership_payment_mode: req.body.membership_payment_mode,
       },
+      { new: true }
     );
 
-    res.status(200).json({ message: "Renew record updated successfully" });
+    logger.info(`Updated renew record ${id} at gym ${req.gymId}`);
+    res.status(200).json({
+      message: "Renew record updated successfully",
+      record: updatedRecord
+    });
   } catch (error) {
-    logger.error(error);
-    res.status(500).json({ message: "Server error", error: error.message });
+    handleError(error, req, res);
   }
 });
 
-// 🔹 Get all membership plans for the current gym
+// Get membership plans
 router.get("/plans", protect, attachGym, async (req, res) => {
   try {
     const plans = await MembershipPlan.find({ gymId: req.gymId });
+    logger.info(`Retrieved ${plans.length} membership plans for gym ${req.gymId}`);
     res.status(200).json(plans);
   } catch (error) {
-    logger.error("Error fetching membership plans:", error);
-    res.status(500).json({ message: "Server error", error: error.message });
+    handleError(error, req, res);
   }
 });
 
-// 🔹 Create a new membership plan
+// Create membership plan
 router.post("/plans", protect, attachGym, async (req, res) => {
   try {
     const { name, duration, price, description, features } = req.body;
 
-    // Validation
     if (!name || !duration || !price || !description) {
-      return res.status(400).json({
-        message: "Please provide name, duration, price, and description",
-      });
+      throw new AppError('Please provide name, duration, price, and description', 400);
     }
 
-    // Check if plan with same name exists
-    const existingPlan = await MembershipPlan.findOne({
-      name,
-      gymId: req.gymId,
-    });
-
+    const existingPlan = await MembershipPlan.findOne({ name, gymId: req.gymId });
     if (existingPlan) {
-      return res.status(400).json({
-        message: "A plan with this name already exists",
-      });
+      throw new AppError('A plan with this name already exists', 400);
     }
 
     const plan = await MembershipPlan.create({
-      name,
-      duration,
-      price,
-      description,
+      name, duration, price, description,
       features: features || [],
       gymId: req.gymId,
     });
 
+    logger.info(`Created new membership plan: ${name} for gym ${req.gymId}`);
     res.status(201).json(plan);
   } catch (error) {
-    logger.error("Error creating membership plan:", error);
-    res.status(500).json({ message: "Server error", error: error.message });
+    handleError(error, req, res);
   }
 });
 
-// 🔹 Update a membership plan
+// Update membership plan
 router.put("/plans/:id", protect, attachGym, async (req, res) => {
   try {
     const { id } = req.params;
     const { name, duration, price, description, features } = req.body;
 
-    // Validation
     if (!name || !duration || !price || !description) {
-      return res.status(400).json({
-        message: "Please provide name, duration, price, and description",
-      });
+      throw new AppError('Please provide name, duration, price, and description', 400);
     }
 
-    // Check if plan exists and belongs to the gym
-    const plan = await MembershipPlan.findOne({
-      _id: id,
-      gymId: req.gymId,
-    });
-
+    const plan = await MembershipPlan.findOne({ _id: id, gymId: req.gymId });
     if (!plan) {
-      return res.status(404).json({ message: "Membership plan not found" });
+      throw new AppError('Membership plan not found', 404);
     }
 
-    // Check if another plan with the same name exists (excluding current plan)
     const existingPlan = await MembershipPlan.findOne({
       name,
       gymId: req.gymId,
@@ -311,98 +247,68 @@ router.put("/plans/:id", protect, attachGym, async (req, res) => {
     });
 
     if (existingPlan) {
-      return res.status(400).json({
-        message: "Another plan with this name already exists",
-      });
+      throw new AppError('Another plan with this name already exists', 400);
     }
 
     const updatedPlan = await MembershipPlan.findOneAndUpdate(
       { _id: id, gymId: req.gymId },
-      {
-        name,
-        duration,
-        price,
-        description,
-        features: features || [],
-      },
-      { new: true },
+      { name, duration, price, description, features: features || [] },
+      { new: true }
     );
 
+    logger.info(`Updated membership plan ${id} at gym ${req.gymId}`);
     res.status(200).json(updatedPlan);
   } catch (error) {
-    logger.error("Error updating membership plan:", error);
-    res.status(500).json({ message: "Server error", error: error.message });
+    handleError(error, req, res);
   }
 });
 
-// 🔹 Delete a membership plan
+// Delete membership plan
 router.delete("/plans/:id", protect, attachGym, async (req, res) => {
   try {
     const { id } = req.params;
-
-    // Check if plan exists and belongs to the gym
-    const plan = await MembershipPlan.findOne({
-      _id: id,
-      gymId: req.gymId,
-    });
-
+    const plan = await MembershipPlan.findOne({ _id: id, gymId: req.gymId });
+    
     if (!plan) {
-      return res.status(404).json({ message: "Membership plan not found" });
+      throw new AppError('Membership plan not found', 404);
     }
 
     await MembershipPlan.deleteOne({ _id: id, gymId: req.gymId });
-
-    res.status(200).json({
-      message: "Membership plan deleted successfully",
-    });
+    logger.info(`Deleted membership plan ${id} from gym ${req.gymId}`);
+    res.status(200).json({ message: "Membership plan deleted successfully" });
   } catch (error) {
-    logger.error("Error deleting membership plan:", error);
-    res.status(500).json({ message: "Server error", error: error.message });
+    handleError(error, req, res);
   }
 });
 
+// Process due payment
 router.post("/pay-due", protect, attachGym, async (req, res) => {
   try {
     const { number, amount_paid, payment_mode } = req.body;
 
-    // Validate request body
     if (!number || !amount_paid || !payment_mode) {
-      return res.status(400).json({
-        message: "Please provide member number, amount paid, and payment mode",
-      });
+      throw new AppError('Please provide member number, amount paid, and payment mode', 400);
     }
 
     const parsedAmount = Number(amount_paid);
     if (isNaN(parsedAmount) || parsedAmount <= 0) {
-      return res.status(400).json({
-        message: "Amount paid must be a positive number",
-      });
+      throw new AppError('Amount paid must be a positive number', 400);
     }
 
-    // Find the member
     const memberRecord = await member.findOne({ number, gymId: req.gymId });
     if (!memberRecord) {
-      return res.status(404).json({ message: "Member not found" });
+      throw new AppError('Member not found', 404);
     }
 
-    // Check if member has any due amount
-    if (
-      !memberRecord.member_total_due_amount ||
-      memberRecord.member_total_due_amount <= 0
-    ) {
-      return res.status(400).json({ message: "Member has no due amount" });
+    if (!memberRecord.member_total_due_amount || memberRecord.member_total_due_amount <= 0) {
+      throw new AppError('Member has no due amount', 400);
     }
 
-    // Validate if payment amount is not more than due amount
     if (parsedAmount > memberRecord.member_total_due_amount) {
-      return res.status(400).json({
-        message: "Payment amount cannot be more than due amount",
-      });
+      throw new AppError('Payment amount cannot be more than due amount', 400);
     }
 
-    // Calculate remaining due amount
-    const remainingDueAmount =
-      memberRecord.member_total_due_amount - parsedAmount;
+    const remainingDueAmount = memberRecord.member_total_due_amount - parsedAmount;
 
     // Update member record: now also update the payment status based on the remaining due amount.
     // Update member record without storing the result
@@ -411,8 +317,7 @@ router.post("/pay-due", protect, attachGym, async (req, res) => {
       {
         $set: {
           member_total_due_amount: remainingDueAmount,
-          membership_payment_status:
-            remainingDueAmount > 0 ? "Pending" : "Paid",
+          membership_payment_status: remainingDueAmount > 0 ? "Pending" : "Paid",
           last_due_payment_date: new Date(),
           last_due_payment_amount: parsedAmount,
         },
@@ -420,21 +325,21 @@ router.post("/pay-due", protect, attachGym, async (req, res) => {
       { new: true },
     );
 
-    // Create a payment record
     await Renew.create({
       name: memberRecord.name,
       number,
-      membership_type: memberRecord.membership_type, // Use existing membership type
+      membership_type: memberRecord.membership_type,
       membership_amount: parsedAmount,
       membership_due_amount: remainingDueAmount,
       membership_payment_status: "Paid",
       membership_payment_mode: payment_mode,
       membership_end_date: memberRecord.membership_end_date,
       gymId: req.gymId,
-      is_due_payment: true, // Flag to indicate this is a due payment
-      payment_type: "Due Payment", // Additional field to distinguish payment type
+      is_due_payment: true,
+      payment_type: "Due Payment",
     });
 
+    logger.info(`Processed due payment of ${parsedAmount} for member ${number} at gym ${req.gymId}`);
     res.status(200).json({
       message: "Due payment processed successfully",
       remaining_due: remainingDueAmount,
@@ -445,8 +350,7 @@ router.post("/pay-due", protect, attachGym, async (req, res) => {
       },
     });
   } catch (error) {
-    logger.error("Error processing due payment:", error);
-    res.status(500).json({ message: "Server error", error: error.message });
+    handleError(error, req, res);
   }
 });
 

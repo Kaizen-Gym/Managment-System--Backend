@@ -36,8 +36,6 @@ try {
 }
 
 const isDevelopment = process.env.NODE_ENV !== "production";
-logger.info("Environment: ", isDevelopment ? "Development" : "Production");
-logger.info(isDevelopment);
 
 const corsOptions = {
   origin: isDevelopment ? ['http://localhost:5173'] : [process.env.FRONTEND_URL],
@@ -144,6 +142,23 @@ if (process.env.NODE_ENV === "production") {
     res.sendFile(path.join(__dirname, "build", "index.html"));
   });
 }
+
+// -------------------------
+// Error Handling Middleware
+// -------------------------
+// Handle unhandled rejections
+process.on('unhandledRejection', (err) => {
+  logger.error('UNHANDLED REJECTION! Shutting down...');
+  logger.error(err.name, err.message);
+  process.exit(1);
+});
+
+// Handle uncaught exceptions
+process.on('uncaughtException', (err) => {
+  logger.error('UNCAUGHT EXCEPTION! Shutting down...');
+  logger.error(err.name, err.message);
+  process.exit(1);
+});
 
 // -------------------------
 // Start the Server
