@@ -42,7 +42,7 @@
     "eslint": "^9.23.0",
     "jest": "^29.7.0",
     "mongodb-memory-server": "^10.1.4",
-    "nodemon": "^3.1.9",
+    "nodemon": "^3.1.10",
     "supertest": "^7.1.0"
   },
   "type": "module"
